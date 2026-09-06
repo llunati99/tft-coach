@@ -1,0 +1,40 @@
+schema: spec-driven
+
+context: |
+  Project: tft-coach — brand-new, empty repo (initialized 2026-09-07).
+  Idea: web app to help play/improve at Teamfight Tactics (TFT) —
+  stats tracking, build/comp recommendations, match analysis.
+  Stack: undecided, to be determined during proposal/design phase.
+  Testing: none yet (no code exists).
+
+strict_tdd: false
+
+testing:
+  status: not_applicable
+  reason: "No code or stack exists yet; test runner cannot be detected."
+  test_command: ""
+
+rules:
+  proposal:
+    - Scope is NOT decided yet — sdd-explore/sdd-propose must define target users, MVP feature set, and data sources (e.g. Riot API) before implementation.
+    - Include rollback plan for risky changes
+  specs:
+    - Use Given/When/Then for scenarios
+    - Use RFC 2119 keywords (MUST, SHALL, SHOULD, MAY)
+  design:
+    - Tech stack MUST be chosen and justified in this phase (frontend/backend/data source), since none exists yet
+    - Include sequence diagrams for complex flows
+    - Document architecture decisions with rationale
+  tasks:
+    - Group by phase, use hierarchical numbering
+    - Keep tasks completable in one session
+  apply:
+    - Follow existing code patterns
+    tdd: false
+    test_command: ""
+  verify:
+    test_command: ""
+    build_command: ""
+    coverage_threshold: 0
+  archive:
+    - Warn before merging destructive deltas
