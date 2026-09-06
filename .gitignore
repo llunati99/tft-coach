@@ -5,3 +5,9 @@ build/
 .env.local
 *.log
 .DS_Store
+
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+venv/

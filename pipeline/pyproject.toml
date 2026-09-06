@@ -1,0 +1,13 @@
+[project]
+name = "tft-coach-pipeline"
+version = "0.1.0"
+description = "Riot TFT match data collection and real win-rate/placement statistics for tft-coach."
+requires-python = ">=3.11"
+dependencies = [
+    "httpx>=0.27",
+    "psycopg[binary]>=3.1",
+    "python-dotenv>=1.0",
+]
+
+[tool.setuptools]
+packages = ["tft_pipeline"]
