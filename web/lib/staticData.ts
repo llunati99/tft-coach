@@ -190,18 +190,27 @@ export async function getTftGameData(): Promise<TftGameData> {
     // A couple of junk entries (a blank/placeholder item icon, an augment
     // mixed into the item list) have name: null — verified live, this
     // crashed a name sort. Real items always have a real name.
-    .filter((item): item is { apiName: string; name: string; icon?: string } => Boolean(item.name));
+    .filter((item): item is { apiName: string; name: string; icon?: string } => Boolean(item.name))
+    // "_Assist_" entries (verified live, 65 of them: "34 de oro", "N
+    // campeones de X costo", "Yunque de X" again...) are augment/portal
+    // reward bundles that get auto-granted and consumed — never something
+    // the player picks up and holds — so they don't belong in a "loose
+    // items in your bag" picker at all.
+    .filter((item) => !item.apiName.includes("_Assist_"));
 
-  // ~279 of these share a display name with another apiName (verified
-  // live: e.g. "Sombrero Mortífero de Rabadon" exists as both
-  // TFT_Item_RabadonsDeathcap and DA_RabadonsDeathcap) — a generic
-  // cross-set item and this set's own reskin of the identical item,
-  // gameplay-indistinguishable. Showing the same item twice in a picker
-  // is just confusing, so keep only the first apiName seen per name.
+  // Many of these share a display name with another apiName: most often a
+  // generic cross-set item vs this set's identically-named reskin (e.g.
+  // "Sombrero Mortífero de Rabadon" as both TFT_Item_RabadonsDeathcap and
+  // DA_RabadonsDeathcap), but verified live there's also at least one pure
+  // translation inconsistency (same icon, "Duplicador de campeón menor"
+  // vs "Duplicador de Campeón menor" — only the capitalization differs).
+  // Compare case-insensitively so both collapse into one; keep the first
+  // apiName seen per name.
   const seenNames = new Set<string>();
   const scopedItems = namedItems.filter((item) => {
-    if (seenNames.has(item.name)) return false;
-    seenNames.add(item.name);
+    const key = item.name.toLowerCase();
+    if (seenNames.has(key)) return false;
+    seenNames.add(key);
     return true;
   });
 
