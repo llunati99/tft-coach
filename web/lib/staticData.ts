@@ -90,6 +90,37 @@ const PICKUP_DESCRIPTIONS: Record<string, string> = {
   TFT6_MercenaryChest: "Grants a random reward (gold, items, or similar).",
 };
 
+/**
+ * Community Dragon's es_ar/es_mx/es_es translations sometimes lag behind
+ * the live client (verified: none of them say "Hadístico" for DA_18_Fae —
+ * es_ar/es_mx say "Hadas", es_es says "Hada"). Since we can't fix Riot's
+ * community mirror, known mismatches get corrected here as they're found.
+ * Add entries as apiName -> the name the live client actually shows.
+ */
+const TRAIT_NAME_OVERRIDES: Record<string, string> = {
+  DA_18_Fae: "Hadístico",
+};
+
+/** Renames a trait consistently everywhere it's referenced — the trait's
+ * own `name` AND every champion's `traits` list, which stores names, not
+ * apiNames (see computeActiveTraits) — so activation matching still works
+ * after the override. Mutates in place. */
+function applyTraitNameOverrides(setData: {
+  traits: Array<{ apiName: string; name: string }>;
+  champions: Array<{ traits: string[] }>;
+}): void {
+  for (const trait of setData.traits) {
+    const override = TRAIT_NAME_OVERRIDES[trait.apiName];
+    if (!override || trait.name === override) continue;
+
+    const oldName = trait.name;
+    trait.name = override;
+    for (const champ of setData.champions) {
+      champ.traits = champ.traits.map((t) => (t === oldName ? override : t));
+    }
+  }
+}
+
 let cachedGameData: { data: TftGameData; fetchedAt: number } | null = null;
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour — patch data doesn't change fast enough to refetch every request
 
@@ -138,6 +169,8 @@ export async function getTftGameData(): Promise<TftGameData> {
       effects: Array<{ minUnits: number; maxUnits: number; style: number }>;
     }>;
   };
+
+  applyTraitNameOverrides(setData);
 
   // `sets` has no item list of its own; the top-level `items` list spans
   // every set ever released (thousands), so scope it down using the
