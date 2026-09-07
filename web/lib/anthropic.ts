@@ -321,7 +321,20 @@ export async function getRecommendation(
   if (!toolUse || toolUse.type !== "tool_use") {
     throw new Error("Model did not return a report_recommendation tool call");
   }
-  return normalizeRecommendation(toolUse.input as Partial<Recommendation>);
+  const recommendation = normalizeRecommendation(toolUse.input as Partial<Recommendation>);
+
+  if (!recommendation.shortAdvice) {
+    // Diagnostic for the "blank recommendation card" failure mode seen
+    // live — logs everything needed to tell apart a truncated response
+    // (stop_reason "max_tokens") from the model just omitting fields.
+    console.error(
+      "getRecommendation: shortAdvice came back empty.",
+      "stop_reason:", response.stop_reason,
+      "raw tool input:", JSON.stringify(toolUse.input)
+    );
+  }
+
+  return recommendation;
 }
 
 function normalizeRecommendation(input: Partial<Recommendation>): Recommendation {

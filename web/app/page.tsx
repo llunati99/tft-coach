@@ -53,6 +53,9 @@ export default function Home() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Error generando la recomendación");
+      if (!data.recommendation?.shortAdvice) {
+        throw new Error("La IA no devolvió una recomendación clara. Probá analizar de nuevo.");
+      }
       setRecommendation(data.recommendation);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error generando la recomendación");
