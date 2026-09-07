@@ -316,7 +316,8 @@ function buildRecommendationTool(gameData: TftGameData) {
 export async function getRecommendation(
   boardDescription: string,
   stats: StatsContext,
-  gameData: TftGameData
+  gameData: TftGameData,
+  hasHistory: boolean = false
 ): Promise<Recommendation> {
   const statsBlock =
     stats.source === "real"
@@ -351,6 +352,13 @@ export async function getRecommendation(
       "compDirection, every 'reason', pickupAdvice) — in those, always refer to champions/items by " +
       "their real display name (e.g. 'Rakan'), NEVER by their internal apiName (e.g. 'DA_18_Rakan'). " +
       "apiName is only for the dedicated id fields (buyFromShop, priorityChampions, unit, item).\n\n" +
+      (hasHistory
+        ? "The board description below includes earlier saved snapshots from THIS SAME match, in " +
+          "chronological order, before the current state. Use them to understand how the comp/" +
+          "items/traits have been evolving — factor that trajectory into your advice (e.g. don't " +
+          "suggest abandoning a direction they've already committed heavily to without good reason, " +
+          "and feel free to note if they should keep going or pivot given how it's progressed).\n\n"
+        : "") +
       "Reference data for the current set:\n" +
       formatGameDataForPrompt(gameData),
     tools: [buildRecommendationTool(gameData)],
@@ -358,7 +366,7 @@ export async function getRecommendation(
     messages: [
       {
         role: "user",
-        content: `Current board:\n${boardDescription}\n\n${statsBlock}\n\nRecommend what to do next.`,
+        content: `${boardDescription}\n\n${statsBlock}\n\nRecommend what to do next.`,
       },
     ],
   });
