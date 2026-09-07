@@ -150,7 +150,35 @@ export async function analyzeScreenshot(
   if (!toolUse || toolUse.type !== "tool_use") {
     throw new Error("Model did not return a report_board tool call");
   }
-  return toolUse.input as BoardReading;
+  return normalizeBoardReading(toolUse.input as Partial<BoardReading>);
+}
+
+/**
+ * The Anthropic API doesn't strictly guarantee every field marked
+ * `required` in a tool's input_schema actually shows up in the model's
+ * output (seen live: `buyFromShop` came back missing, crashing the UI on
+ * `.length`) — so every array/nullable field gets a safe default here,
+ * once, instead of every caller needing its own defensive checks.
+ */
+function normalizeUnit(unit: Partial<BoardUnitReading>): BoardUnitReading {
+  return {
+    apiName: unit.apiName ?? "",
+    star: unit.star ?? 1,
+    items: unit.items ?? [],
+  };
+}
+
+function normalizeBoardReading(input: Partial<BoardReading>): BoardReading {
+  return {
+    units: (input.units ?? []).map(normalizeUnit),
+    bench: (input.bench ?? []).map(normalizeUnit),
+    shop: input.shop ?? [],
+    gold: input.gold ?? 0,
+    level: input.level ?? 0,
+    stage: input.stage ?? "",
+    augments: input.augments ?? [],
+    rerollCost: input.rerollCost ?? null,
+  };
 }
 
 export interface StatsContext {
@@ -293,5 +321,21 @@ export async function getRecommendation(
   if (!toolUse || toolUse.type !== "tool_use") {
     throw new Error("Model did not return a report_recommendation tool call");
   }
-  return toolUse.input as Recommendation;
+  return normalizeRecommendation(toolUse.input as Partial<Recommendation>);
+}
+
+function normalizeRecommendation(input: Partial<Recommendation>): Recommendation {
+  return {
+    shortAdvice: input.shortAdvice ?? "",
+    buyFromShop: input.buyFromShop ?? [],
+    compDirection: input.compDirection ?? "",
+    statsSource: input.statsSource ?? "estimated",
+    sampleSize: input.sampleSize ?? null,
+    priorityChampions: input.priorityChampions ?? [],
+    itemSuggestions: (input.itemSuggestions ?? []).map((s) => ({
+      unit: s.unit ?? "",
+      item: s.item ?? "",
+      reason: s.reason ?? "",
+    })),
+  };
 }
