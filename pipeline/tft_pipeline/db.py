@@ -9,9 +9,16 @@ from psycopg.types.json import Jsonb
 from .config import Settings
 
 
+def connect_raw(settings: Settings) -> Connection:
+    """A plain (non-context-manager) connection — for callers that need to
+    replace a dropped connection mid-run (see collect.py's reconnect loop)
+    rather than hold one open for the whole process lifetime."""
+    return psycopg.connect(settings.database_url)
+
+
 @contextmanager
 def connect(settings: Settings) -> Iterator[Connection]:
-    conn = psycopg.connect(settings.database_url)
+    conn = connect_raw(settings)
     try:
         yield conn
     finally:

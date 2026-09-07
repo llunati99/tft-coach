@@ -8,6 +8,8 @@ Usage: python -m tft_pipeline.collect [--max-players N] [--matches-per-player N]
 import argparse
 import logging
 
+import psycopg
+
 from . import db
 from .config import load_settings
 from .riot_client import RiotClient
@@ -32,7 +34,8 @@ def seed_puuids(client: RiotClient, max_players: int) -> list[str]:
 def collect(max_players: int, matches_per_player: int) -> None:
     settings = load_settings()
 
-    with RiotClient(settings) as client, db.connect(settings) as conn:
+    with RiotClient(settings) as client:
+        conn = db.connect_raw(settings)
         db.apply_schema(conn)
 
         queue = seed_puuids(client, max_players)
@@ -41,49 +44,64 @@ def collect(max_players: int, matches_per_player: int) -> None:
 
         while queue and players_crawled < max_players:
             puuid = queue.pop(0)
-            if db.is_player_crawled(conn, puuid):
-                continue
 
             try:
-                match_ids = client.get_match_ids_by_puuid(puuid, count=matches_per_player)
-            except Exception:
-                logger.exception("Failed to fetch match ids for puuid %s", puuid)
-                continue
-
-            for match_id in match_ids:
-                if db.match_exists(conn, match_id):
+                if db.is_player_crawled(conn, puuid):
                     continue
 
                 try:
-                    match = client.get_match(match_id)
+                    match_ids = client.get_match_ids_by_puuid(puuid, count=matches_per_player)
                 except Exception:
-                    logger.exception("Failed to fetch match %s", match_id)
+                    logger.exception("Failed to fetch match ids for puuid %s", puuid)
                     continue
 
-                info = match["info"]
-                db.insert_match(
-                    conn,
-                    match_id=match_id,
-                    region=settings.region,
-                    game_version=info["game_version"],
-                    game_datetime=info["game_datetime"],
-                    raw_data=match,
+                for match_id in match_ids:
+                    if db.match_exists(conn, match_id):
+                        continue
+
+                    try:
+                        match = client.get_match(match_id)
+                    except Exception:
+                        logger.exception("Failed to fetch match %s", match_id)
+                        continue
+
+                    info = match["info"]
+                    db.insert_match(
+                        conn,
+                        match_id=match_id,
+                        region=settings.region,
+                        game_version=info["game_version"],
+                        game_datetime=info["game_datetime"],
+                        raw_data=match,
+                    )
+
+                    for participant in info.get("participants", []):
+                        other_puuid = participant.get("puuid")
+                        if other_puuid and other_puuid not in seen:
+                            seen.add(other_puuid)
+                            queue.append(other_puuid)
+
+                db.mark_player_crawled(conn, puuid, settings.region)
+                players_crawled += 1
+                logger.info(
+                    "Crawled %d/%d players (queue size: %d)",
+                    players_crawled,
+                    max_players,
+                    len(queue),
                 )
+            except psycopg.OperationalError:
+                logger.warning(
+                    "DB connection dropped mid-player (%s) — reconnecting and retrying.", puuid
+                )
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+                conn = db.connect_raw(settings)
+                queue.insert(0, puuid)
+                continue
 
-                for participant in info.get("participants", []):
-                    other_puuid = participant.get("puuid")
-                    if other_puuid and other_puuid not in seen:
-                        seen.add(other_puuid)
-                        queue.append(other_puuid)
-
-            db.mark_player_crawled(conn, puuid, settings.region)
-            players_crawled += 1
-            logger.info(
-                "Crawled %d/%d players (queue size: %d)",
-                players_crawled,
-                max_players,
-                len(queue),
-            )
+        conn.close()
 
 
 def main() -> None:
