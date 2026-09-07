@@ -17,6 +17,9 @@ from .riot_client import RiotClient
 logger = logging.getLogger(__name__)
 
 
+DIAMOND_DIVISIONS = ["I", "II", "III", "IV"]
+
+
 def seed_puuids(client: RiotClient, max_players: int) -> list[str]:
     puuids: list[str] = []
     for fetch in (
@@ -27,7 +30,22 @@ def seed_puuids(client: RiotClient, max_players: int) -> list[str]:
         league = fetch()
         puuids.extend(entry["puuid"] for entry in league.get("entries", []))
         if len(puuids) >= max_players:
-            break
+            return puuids[:max_players]
+
+    # Apex tiers (challenger/GM/master) are a small, closed population — on
+    # a smaller server, the snowball crawl fully exhausts it and stops
+    # finding new players (seen live on LAS). Diamond is directly below
+    # master and much bigger, giving the crawl real room to keep growing.
+    logger.info("Apex tiers exhausted at %d players, seeding from Diamond too", len(puuids))
+    for division in DIAMOND_DIVISIONS:
+        page = 1
+        while len(puuids) < max_players:
+            entries = client.get_league_entries("DIAMOND", division, page=page)
+            if not entries:
+                break
+            puuids.extend(entry["puuid"] for entry in entries)
+            page += 1
+
     return puuids[:max_players]
 
 

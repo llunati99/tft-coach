@@ -86,6 +86,16 @@ class RiotClient:
         )
         return self._get(url)
 
+    def get_league_entries(self, tier: str, division: str, page: int = 1) -> list[dict]:
+        """Paginated entries for a non-apex tier (DIAMOND, EMERALD, PLATINUM,
+        ...) + division (I-IV). Same shape as the apex leagues (includes
+        puuid directly). Returns [] past the last page."""
+        url = (
+            f"https://{self.settings.platform}.api.riotgames.com"
+            f"/tft/league/v1/entries/{tier}/{division}?page={page}"
+        )
+        return self._get(url)
+
     # -- Region-routed endpoints (match) ---------------------------------
 
     def get_match_ids_by_puuid(self, puuid: str, count: int = 20) -> list[str]:
