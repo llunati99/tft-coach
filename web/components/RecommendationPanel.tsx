@@ -59,8 +59,8 @@ export default function RecommendationPanel({ recommendation, gameData }: Props)
 
       {recommendation.buyFromShop.length > 0 && (
         <div className="mb-3 flex flex-wrap gap-2">
-          {recommendation.buyFromShop.map((apiName) => (
-            <ChampionIcon key={apiName} apiName={apiName} championByApiName={championByApiName} />
+          {recommendation.buyFromShop.map((apiName, i) => (
+            <ChampionIcon key={`${apiName}-${i}`} apiName={apiName} championByApiName={championByApiName} />
           ))}
         </div>
       )}
@@ -74,8 +74,8 @@ export default function RecommendationPanel({ recommendation, gameData }: Props)
         <div className="mb-3">
           <p className="mb-1 text-xs uppercase tracking-wide text-slate-500">También buscar</p>
           <div className="flex flex-wrap gap-2">
-            {recommendation.priorityChampions.map((apiName) => (
-              <ChampionIcon key={apiName} apiName={apiName} championByApiName={championByApiName} />
+            {recommendation.priorityChampions.map((apiName, i) => (
+              <ChampionIcon key={`${apiName}-${i}`} apiName={apiName} championByApiName={championByApiName} />
             ))}
           </div>
         </div>
