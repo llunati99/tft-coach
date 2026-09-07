@@ -82,7 +82,7 @@ export default function Home() {
 
         {board && gameData && (
           <>
-            <BoardPreview board={board} gameData={gameData} />
+            <BoardPreview board={board} gameData={gameData} onChange={setBoard} />
             <button
               onClick={handleAnalyze}
               disabled={isRecommending}
