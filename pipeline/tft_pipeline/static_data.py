@@ -21,12 +21,35 @@ def get_latest_patch() -> str:
 
 
 def get_tft_game_data() -> dict:
-    """Full current-set TFT static data: champions, traits, items, augments.
+    """Champions, traits (with tier breakpoints), and items for the current
+    live TFT set.
 
-    Community Dragon's "latest" alias tracks live TFT data (updates faster
-    than Data Dragon for mid-set balance changes), so prefer this for
-    champion/trait/item lookups.
+    Community Dragon's top-level shape is {"items": [...], "setData": [...],
+    "sets": {"1": {...}, ..., "18": {...}}}. `sets` is keyed by set number
+    and only holds the clean, current data for each notable set (no
+    PVE/turbo/pairs variants, unlike the messier `setData` list) — the
+    highest numeric key is the live set. This matches what real match data
+    reports as `info.tft_set_number`.
     """
     response = httpx.get(COMMUNITY_DRAGON_TFT_DATA_URL, timeout=15.0)
     response.raise_for_status()
-    return response.json()
+    raw = response.json()
+
+    set_number = max(int(key) for key in raw["sets"])
+    set_data = raw["sets"][str(set_number)]
+
+    # `sets` has no item list of its own; the top-level `items` list spans
+    # every set ever released (thousands), so scope it down using the
+    # matching core mutator entry in `setData`, which does list just the
+    # current set's item API names.
+    core_mutator = f"TFTSet{set_number}"
+    core_set = next(sd for sd in raw["setData"] if sd["mutator"] == core_mutator)
+    current_item_names = set(core_set["items"])
+    items = [item for item in raw["items"] if item["apiName"] in current_item_names]
+
+    return {
+        "set_number": set_number,
+        "champions": set_data["champions"],
+        "traits": set_data["traits"],
+        "items": items,
+    }
