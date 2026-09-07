@@ -2,13 +2,20 @@ import { NextResponse } from "next/server";
 import { BoardReading, getRecommendation, StatsContext } from "@/lib/anthropic";
 import { carryUnit, compSignature } from "@/lib/compSignature";
 import { getCompStats, getItemStats } from "@/lib/db";
-import { computeActiveTraits, getTftGameData } from "@/lib/staticData";
+import { computeActiveTraits, getTftGameData, type TftGameData } from "@/lib/staticData";
 
-function describeBoard(board: BoardReading, activeTraits: ReturnType<typeof computeActiveTraits>) {
+function describeBoard(
+  board: BoardReading,
+  activeTraits: ReturnType<typeof computeActiveTraits>,
+  gameData: TftGameData
+) {
+  const pickupApiNames = new Set(gameData.pickups.map((p) => p.apiName));
   const unitLines = board.units
     .map((u) => `- ${u.apiName} (${u.star}★)${u.items.length ? ` con ${u.items.join(", ")}` : ""}`)
     .join("\n");
-  const benchLines = board.bench.map((u) => `- ${u.apiName} (${u.star}★)`).join("\n");
+  const benchLines = board.bench
+    .map((u) => (pickupApiNames.has(u.apiName) ? `- ${u.apiName} (pickup, sin usar)` : `- ${u.apiName} (${u.star}★)`))
+    .join("\n");
   const traitLines = activeTraits
     .filter((t) => t.tierCurrent > 0)
     .map((t) => `- ${t.name}: ${t.numUnits} unidades (tier ${t.tierCurrent})`)
@@ -78,7 +85,7 @@ export async function POST(request: Request) {
 
   try {
     const recommendation = await getRecommendation(
-      describeBoard(board, activeTraits),
+      describeBoard(board, activeTraits, gameData),
       statsContext,
       gameData
     );

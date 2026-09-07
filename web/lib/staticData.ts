@@ -56,12 +56,39 @@ export interface TftItem {
   iconUrl?: string;
 }
 
+export interface TftPickup {
+  apiName: string;
+  name: string;
+  iconUrl?: string;
+  description: string;
+}
+
 export interface TftGameData {
   setNumber: number;
   champions: TftChampion[];
   traits: TftTrait[];
   items: TftItem[];
+  pickups: TftPickup[];
 }
+
+/**
+ * Carousel/round "pickup" rewards — anvils, the trait emblem tome, the
+ * mercenary chest. These are generic mechanics reused across sets (not
+ * set-specific balance data), so their apiNames and meaning are hardcoded
+ * here rather than sourced from Community Dragon. They show up in the same
+ * zero-trait champion list as PvE creatures (see the filter below) but,
+ * unlike those, players do pick them up and hold them on the bench — the
+ * player asked to be able to add these manually since the vision model
+ * was never asked to (and shouldn't try to) read them from a screenshot.
+ */
+const PICKUP_DESCRIPTIONS: Record<string, string> = {
+  TFT_ArmoryKeyComponent: "Grants a choice of a random item component.",
+  TFT_ArmoryKeyCompleted: "Grants a choice of a random completed item.",
+  TFT_ArmoryKeyOrnn: "Grants a choice of a powerful Ornn/artifact item.",
+  TFT_ArmoryKeySupport: "Grants a choice of a support item.",
+  TFT5_EmblemArmoryKey: "Grants a choice of a trait emblem.",
+  TFT6_MercenaryChest: "Grants a random reward (gold, items, or similar).",
+};
 
 let cachedGameData: { data: TftGameData; fetchedAt: number } | null = null;
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour — patch data doesn't change fast enough to refetch every request
@@ -133,9 +160,16 @@ export async function getTftGameData(): Promise<TftGameData> {
   // confusing a small/distant player champion for one of these (seen live:
   // a real Veigar misread as the "Murkwolf" jungle creature).
   const playableChampions = setData.champions.filter((champ) => champ.traits.length > 0);
+  const pickups = setData.champions.filter((champ) => champ.apiName in PICKUP_DESCRIPTIONS);
 
   const data: TftGameData = {
     setNumber,
+    pickups: pickups.map((p) => ({
+      apiName: p.apiName,
+      name: p.name,
+      iconUrl: p.squareIcon ? communityDragonAssetUrl(p.squareIcon) : undefined,
+      description: PICKUP_DESCRIPTIONS[p.apiName],
+    })),
     champions: playableChampions.map((champ) => ({
       apiName: champ.apiName,
       name: champ.name,
@@ -172,8 +206,20 @@ export function formatGameDataForPrompt(data: TftGameData): string {
     .map((c) => `${c.name} (${c.apiName}) [${c.traits.join(", ")}]`)
     .join("\n");
   const itemLines = data.items.map((i) => `${i.name} (${i.apiName})`).join("\n");
+  const pickupLines = data.pickups
+    .map((p) => `${p.name} (${p.apiName}): ${p.description}`)
+    .join("\n");
 
-  return ["CHAMPIONS:", champLines, "", "ITEMS:", itemLines].join("\n");
+  return [
+    "CHAMPIONS:",
+    champLines,
+    "",
+    "ITEMS:",
+    itemLines,
+    "",
+    "PICKUPS the player may be holding on the bench (anvils, tome, chest — not combat units):",
+    pickupLines,
+  ].join("\n");
 }
 
 /**

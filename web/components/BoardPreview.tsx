@@ -62,6 +62,8 @@ export default function BoardPreview({ board, gameData, onChange }: Props) {
     [gameData]
   );
   const itemByApiName = useMemo(() => new Map(gameData.items.map((i) => [i.apiName, i])), [gameData]);
+  const pickupByApiName = useMemo(() => new Map(gameData.pickups.map((p) => [p.apiName, p])), [gameData]);
+  const pickupApiNames = useMemo(() => new Set(gameData.pickups.map((p) => p.apiName)), [gameData]);
 
   function updateUnit(group: Group, index: number, updated: BoardUnitReading | null) {
     const list = [...board[group]];
@@ -83,7 +85,8 @@ export default function BoardPreview({ board, gameData, onChange }: Props) {
   }
 
   function renderUnit(unit: BoardUnitReading, group: Group, index: number) {
-    const champion = championByApiName.get(unit.apiName);
+    const isPickup = pickupApiNames.has(unit.apiName);
+    const entity = isPickup ? pickupByApiName.get(unit.apiName) : championByApiName.get(unit.apiName);
     return (
       <div key={index} className="relative flex flex-col items-center gap-1 rounded-lg bg-slate-800 p-2 w-20">
         <button
@@ -94,17 +97,17 @@ export default function BoardPreview({ board, gameData, onChange }: Props) {
           ×
         </button>
         <button onClick={() => setEditing({ group, index })} className="flex flex-col items-center gap-1">
-          {champion?.iconUrl ? (
+          {entity?.iconUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={champion.iconUrl} alt={champion.name} className="h-12 w-12 rounded-md object-cover" />
+            <img src={entity.iconUrl} alt={entity.name} className="h-12 w-12 rounded-md object-cover" />
           ) : (
             <div className="h-12 w-12 rounded-md bg-slate-700" />
           )}
           <span className="text-xs text-slate-200 text-center leading-tight">
-            {champion?.name ?? unit.apiName}
+            {entity?.name ?? unit.apiName}
           </span>
         </button>
-        <StarRating star={unit.star} onSet={(star) => setStar(group, index, star)} />
+        {!isPickup && <StarRating star={unit.star} onSet={(star) => setStar(group, index, star)} />}
         {unit.items.length > 0 && (
           <div className="flex gap-0.5">
             {unit.items.map((itemId, i) => {
@@ -178,6 +181,7 @@ export default function BoardPreview({ board, gameData, onChange }: Props) {
       {editing && (
         <ChampionPicker
           gameData={gameData}
+          pickups={editing.group === "bench" ? gameData.pickups : undefined}
           onClose={() => setEditing(null)}
           onSelect={(apiName) => {
             const unit = board[editing.group][editing.index];
@@ -190,6 +194,7 @@ export default function BoardPreview({ board, gameData, onChange }: Props) {
       {adding && (
         <ChampionPicker
           gameData={gameData}
+          pickups={adding === "bench" ? gameData.pickups : undefined}
           onClose={() => setAdding(null)}
           onSelect={(apiName) => addUnit(adding, apiName)}
         />

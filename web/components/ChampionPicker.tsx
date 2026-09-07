@@ -1,23 +1,32 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { TftGameData } from "@/lib/staticData";
+import type { TftGameData, TftPickup } from "@/lib/staticData";
 
 interface Props {
   gameData: TftGameData;
+  pickups?: TftPickup[];
   onSelect: (apiName: string) => void;
   onClose: () => void;
 }
 
-export default function ChampionPicker({ gameData, onSelect, onClose }: Props) {
+export default function ChampionPicker({ gameData, pickups, onSelect, onClose }: Props) {
   const [query, setQuery] = useState("");
 
-  const filtered = useMemo(() => {
+  const options = useMemo(() => {
+    const champs = [...gameData.champions]
+      .sort((a, b) => (a.cost ?? 0) - (b.cost ?? 0))
+      .map((c) => ({ apiName: c.apiName, name: c.name, iconUrl: c.iconUrl }));
+    const pickupOptions = (pickups ?? []).map((p) => ({
+      apiName: p.apiName,
+      name: p.name,
+      iconUrl: p.iconUrl,
+    }));
+
     const q = query.trim().toLowerCase();
-    const champs = [...gameData.champions].sort((a, b) => (a.cost ?? 0) - (b.cost ?? 0));
-    if (!q) return champs;
-    return champs.filter((c) => c.name.toLowerCase().includes(q));
-  }, [query, gameData.champions]);
+    const all = [...pickupOptions, ...champs];
+    return q ? all.filter((o) => o.name.toLowerCase().includes(q)) : all;
+  }, [query, gameData.champions, pickups]);
 
   return (
     <div
@@ -33,26 +42,26 @@ export default function ChampionPicker({ gameData, onSelect, onClose }: Props) {
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Buscar campeón..."
+          placeholder="Buscar campeón u objeto..."
           className="mb-3 w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-white placeholder-slate-500 focus:border-emerald-500 focus:outline-none"
         />
         <div className="grid max-h-96 grid-cols-4 gap-2 overflow-y-auto">
-          {filtered.map((champ) => (
+          {options.map((option) => (
             <button
-              key={champ.apiName}
-              onClick={() => onSelect(champ.apiName)}
+              key={option.apiName}
+              onClick={() => onSelect(option.apiName)}
               className="flex flex-col items-center gap-1 rounded-lg p-2 hover:bg-slate-800"
             >
-              {champ.iconUrl ? (
+              {option.iconUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={champ.iconUrl} alt={champ.name} className="h-12 w-12 rounded-md object-cover" />
+                <img src={option.iconUrl} alt={option.name} className="h-12 w-12 rounded-md object-cover" />
               ) : (
                 <div className="h-12 w-12 rounded-md bg-slate-700" />
               )}
-              <span className="text-center text-xs leading-tight text-slate-200">{champ.name}</span>
+              <span className="text-center text-xs leading-tight text-slate-200">{option.name}</span>
             </button>
           ))}
-          {filtered.length === 0 && (
+          {options.length === 0 && (
             <p className="col-span-4 py-6 text-center text-sm text-slate-500">Sin resultados</p>
           )}
         </div>
