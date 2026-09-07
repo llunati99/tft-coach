@@ -129,6 +129,7 @@ export async function getTftGameData(): Promise<TftGameData> {
       traits: string[];
       cost?: number;
       squareIcon?: string;
+      tileIcon?: string;
     }>;
     traits: Array<{
       apiName: string;
@@ -162,12 +163,23 @@ export async function getTftGameData(): Promise<TftGameData> {
   const playableChampions = setData.champions.filter((champ) => champ.traits.length > 0);
   const pickups = setData.champions.filter((champ) => champ.apiName in PICKUP_DESCRIPTIONS);
 
+  // Most champions have squareIcon, but the armory-key pickups (verified
+  // live: their icons were showing broken) only have tileIcon. Community
+  // Dragon also represents some missing fields as the literal string
+  // "None" rather than a real null/absent value — also verified live, it's
+  // what caused the broken icons — so that has to be filtered out too.
+  const isRealPath = (path?: string) => Boolean(path) && path!.toLowerCase() !== "none";
+  const iconUrlFor = (entity: { squareIcon?: string; tileIcon?: string }) => {
+    const path = isRealPath(entity.squareIcon) ? entity.squareIcon : entity.tileIcon;
+    return isRealPath(path) ? communityDragonAssetUrl(path!) : undefined;
+  };
+
   const data: TftGameData = {
     setNumber,
     pickups: pickups.map((p) => ({
       apiName: p.apiName,
       name: p.name,
-      iconUrl: p.squareIcon ? communityDragonAssetUrl(p.squareIcon) : undefined,
+      iconUrl: iconUrlFor(p),
       description: PICKUP_DESCRIPTIONS[p.apiName],
     })),
     champions: playableChampions.map((champ) => ({
@@ -175,7 +187,7 @@ export async function getTftGameData(): Promise<TftGameData> {
       name: champ.name,
       traits: champ.traits,
       cost: champ.cost,
-      iconUrl: champ.squareIcon ? communityDragonAssetUrl(champ.squareIcon) : undefined,
+      iconUrl: iconUrlFor(champ),
     })),
     traits: setData.traits.map((trait) => ({
       apiName: trait.apiName,
