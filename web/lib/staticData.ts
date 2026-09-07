@@ -148,10 +148,16 @@ export async function getTftGameData(): Promise<TftGameData> {
     (sd) => sd.mutator === coreMutator
   );
   const currentItemNames = new Set(coreSetEntry?.items ?? []);
-  const allItems = raw.items as Array<{ apiName: string; name: string; icon?: string }>;
-  const scopedItems = currentItemNames.size > 0
-    ? allItems.filter((item) => currentItemNames.has(item.apiName))
-    : allItems;
+  const allItems = raw.items as Array<{ apiName: string; name: string | null; icon?: string }>;
+  const scopedItems = (
+    currentItemNames.size > 0
+      ? allItems.filter((item) => currentItemNames.has(item.apiName))
+      : allItems
+  )
+    // A couple of junk entries (a blank/placeholder item icon, an augment
+    // mixed into the item list) have name: null — verified live, this
+    // crashed a name sort. Real items always have a real name.
+    .filter((item): item is { apiName: string; name: string; icon?: string } => Boolean(item.name));
 
   // Community Dragon's champion list also includes non-playable entries —
   // PvE jungle creatures (Golem, Murkwolf, Crab...) and carousel pickup
