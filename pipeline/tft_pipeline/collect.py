@@ -7,14 +7,42 @@ Usage: python -m tft_pipeline.collect [--max-players N] [--matches-per-player N]
 
 import argparse
 import logging
+import time
 
 import psycopg
 
 from . import db
-from .config import load_settings
+from .config import Settings, load_settings
 from .riot_client import RiotClient
 
 logger = logging.getLogger(__name__)
+
+RECONNECT_MAX_ATTEMPTS = 6
+RECONNECT_BASE_DELAY_SECONDS = 5
+
+
+def _reconnect_with_retry(settings: Settings) -> psycopg.Connection:
+    """The DB drop itself is one failure mode; the reconnect attempt can
+    also hit a transient one (seen live: a brief local DNS blip made the
+    very first reconnect attempt fail with getaddrinfo errors, crashing a
+    run that would have otherwise recovered fine a few seconds later).
+    Retries with backoff instead of giving up on the first failed attempt.
+    """
+    for attempt in range(1, RECONNECT_MAX_ATTEMPTS + 1):
+        try:
+            return db.connect_raw(settings)
+        except psycopg.OperationalError:
+            if attempt == RECONNECT_MAX_ATTEMPTS:
+                raise
+            delay = RECONNECT_BASE_DELAY_SECONDS * attempt
+            logger.warning(
+                "Reconnect attempt %d/%d failed, retrying in %ds.",
+                attempt,
+                RECONNECT_MAX_ATTEMPTS,
+                delay,
+            )
+            time.sleep(delay)
+    raise RuntimeError("unreachable")
 
 
 DIAMOND_DIVISIONS = ["I", "II", "III", "IV"]
@@ -53,7 +81,7 @@ def collect(max_players: int, matches_per_player: int) -> None:
     settings = load_settings()
 
     with RiotClient(settings) as client:
-        conn = db.connect_raw(settings)
+        conn = _reconnect_with_retry(settings)
         db.apply_schema(conn)
 
         queue = seed_puuids(client, max_players)
@@ -115,7 +143,7 @@ def collect(max_players: int, matches_per_player: int) -> None:
                     conn.close()
                 except Exception:
                     pass
-                conn = db.connect_raw(settings)
+                conn = _reconnect_with_retry(settings)
                 queue.insert(0, puuid)
                 continue
 
