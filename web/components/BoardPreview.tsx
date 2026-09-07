@@ -79,8 +79,9 @@ export default function BoardPreview({ board, gameData, onChange }: Props) {
     updateUnit(group, index, { ...board[group][index], star });
   }
 
-  function addUnit(group: Group, apiName: string) {
-    onChange({ ...board, [group]: [...board[group], { apiName, star: 1, items: [] }] });
+  function addUnits(group: Group, apiNames: string[]) {
+    const newUnits = apiNames.map((apiName) => ({ apiName, star: 1, items: [] }));
+    onChange({ ...board, [group]: [...board[group], ...newUnits] });
     setAdding(null);
   }
 
@@ -196,7 +197,8 @@ export default function BoardPreview({ board, gameData, onChange }: Props) {
           gameData={gameData}
           pickups={adding === "bench" ? gameData.pickups : undefined}
           onClose={() => setAdding(null)}
-          onSelect={(apiName) => addUnit(adding, apiName)}
+          multi
+          onConfirm={(apiNames) => addUnits(adding, apiNames)}
         />
       )}
     </div>
