@@ -54,7 +54,7 @@ function StarRating({ star, onSet }: { star: number; onSet: (star: number) => vo
   );
 }
 
-type EditTarget = { kind: "unit"; group: Group; index: number } | { kind: "looseItem"; index: number };
+type EditTarget = { kind: "unit"; group: Group; index: number } | { kind: "looseItem"; apiName: string };
 type AddTarget = Group | "looseItems";
 
 export default function BoardPreview({ board, gameData, onChange }: Props) {
@@ -127,20 +127,36 @@ export default function BoardPreview({ board, gameData, onChange }: Props) {
     setAdding(null);
   }
 
-  function updateLooseItem(index: number, updated: string | null) {
-    const list = [...board.looseItems];
-    if (updated) {
-      list[index] = updated;
-    } else {
-      list.splice(index, 1);
-    }
-    onChange({ ...board, looseItems: list });
-  }
-
   function addLooseItems(apiNames: string[]) {
     onChange({ ...board, looseItems: [...board.looseItems, ...apiNames] });
     setAdding(null);
   }
+
+  function addLooseItemCopy(apiName: string) {
+    onChange({ ...board, looseItems: [...board.looseItems, apiName] });
+  }
+
+  function removeLooseItemCopy(apiName: string) {
+    const index = board.looseItems.indexOf(apiName);
+    if (index === -1) return;
+    const list = [...board.looseItems];
+    list.splice(index, 1);
+    onChange({ ...board, looseItems: list });
+  }
+
+  function replaceLooseItemCopy(oldApiName: string, newApiName: string) {
+    const index = board.looseItems.indexOf(oldApiName);
+    if (index === -1) return;
+    const list = [...board.looseItems];
+    list[index] = newApiName;
+    onChange({ ...board, looseItems: list });
+  }
+
+  const looseItemGroups = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const apiName of board.looseItems) counts.set(apiName, (counts.get(apiName) ?? 0) + 1);
+    return Array.from(counts.entries()).map(([apiName, count]) => ({ apiName, count }));
+  }, [board.looseItems]);
 
   function renderUnit(unit: BoardUnitReading, group: Group, index: number) {
     const isPickup = pickupApiNames.has(unit.apiName);
@@ -279,18 +295,25 @@ export default function BoardPreview({ board, gameData, onChange }: Props) {
         </button>
       </p>
       <div className="flex flex-wrap gap-2">
-        {board.looseItems.map((apiName, i) => {
+        {looseItemGroups.map(({ apiName, count }) => {
           const item = itemByApiName.get(apiName);
           return (
-            <div key={i} className="relative flex flex-col items-center gap-1 rounded-lg bg-slate-800 p-2 w-16">
+            <div key={apiName} className="relative flex flex-col items-center gap-1 rounded-lg bg-slate-800 p-2 w-16">
               <button
-                onClick={() => updateLooseItem(i, null)}
+                onClick={() => addLooseItemCopy(apiName)}
+                className="absolute -left-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-600 text-[10px] text-white hover:bg-emerald-500"
+                title="Agregar otra copia"
+              >
+                +
+              </button>
+              <button
+                onClick={() => removeLooseItemCopy(apiName)}
                 className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-slate-950 text-[10px] text-slate-400 hover:text-red-400"
-                title="Quitar"
+                title="Quitar una copia"
               >
                 ×
               </button>
-              <button onClick={() => setEditing({ kind: "looseItem", index: i })} className="flex flex-col items-center gap-1">
+              <button onClick={() => setEditing({ kind: "looseItem", apiName })} className="flex flex-col items-center gap-1">
                 {item?.iconUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={item.iconUrl} alt={item.name} className="h-10 w-10 rounded-md object-cover" />
@@ -301,10 +324,13 @@ export default function BoardPreview({ board, gameData, onChange }: Props) {
                   {item?.name ?? apiName}
                 </span>
               </button>
+              {count > 1 && (
+                <span className="rounded-full bg-slate-700 px-1.5 text-[10px] text-slate-200">×{count}</span>
+              )}
             </div>
           );
         })}
-        {board.looseItems.length === 0 && <p className="text-sm text-slate-500">(ninguno)</p>}
+        {looseItemGroups.length === 0 && <p className="text-sm text-slate-500">(ninguno)</p>}
       </div>
 
       {editing?.kind === "unit" && (
@@ -323,10 +349,10 @@ export default function BoardPreview({ board, gameData, onChange }: Props) {
       {editing?.kind === "looseItem" && (
         <EntityPicker
           options={itemOptions}
-          placeholder="Buscar item..."
+          placeholder="Reemplazar una copia por..."
           onClose={() => setEditing(null)}
           onSelect={(apiName) => {
-            updateLooseItem(editing.index, apiName);
+            replaceLooseItemCopy(editing.apiName, apiName);
             setEditing(null);
           }}
         />
@@ -348,6 +374,7 @@ export default function BoardPreview({ board, gameData, onChange }: Props) {
           placeholder="Buscar item..."
           onClose={() => setAdding(null)}
           multi
+          allowQuantity
           onConfirm={addLooseItems}
         />
       )}

@@ -182,7 +182,7 @@ export async function getTftGameData(): Promise<TftGameData> {
   );
   const currentItemNames = new Set(coreSetEntry?.items ?? []);
   const allItems = raw.items as Array<{ apiName: string; name: string | null; icon?: string }>;
-  const scopedItems = (
+  const namedItems = (
     currentItemNames.size > 0
       ? allItems.filter((item) => currentItemNames.has(item.apiName))
       : allItems
@@ -191,6 +191,19 @@ export async function getTftGameData(): Promise<TftGameData> {
     // mixed into the item list) have name: null — verified live, this
     // crashed a name sort. Real items always have a real name.
     .filter((item): item is { apiName: string; name: string; icon?: string } => Boolean(item.name));
+
+  // ~279 of these share a display name with another apiName (verified
+  // live: e.g. "Sombrero Mortífero de Rabadon" exists as both
+  // TFT_Item_RabadonsDeathcap and DA_RabadonsDeathcap) — a generic
+  // cross-set item and this set's own reskin of the identical item,
+  // gameplay-indistinguishable. Showing the same item twice in a picker
+  // is just confusing, so keep only the first apiName seen per name.
+  const seenNames = new Set<string>();
+  const scopedItems = namedItems.filter((item) => {
+    if (seenNames.has(item.name)) return false;
+    seenNames.add(item.name);
+    return true;
+  });
 
   // Community Dragon's champion list also includes non-playable entries —
   // PvE jungle creatures (Golem, Murkwolf, Crab...) and carousel pickup
