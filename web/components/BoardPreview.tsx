@@ -36,6 +36,23 @@ function ChampionIcon({
 
 type Group = "units" | "bench";
 
+function StarRating({ star, onSet }: { star: number; onSet: (star: number) => void }) {
+  return (
+    <div className="flex gap-0.5">
+      {[1, 2, 3].map((n) => (
+        <button
+          key={n}
+          onClick={() => onSet(n)}
+          className={n <= star ? "text-[11px] text-amber-400" : "text-[11px] text-slate-600 hover:text-amber-500/60"}
+          title={`${n} estrella${n > 1 ? "s" : ""}`}
+        >
+          ★
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function BoardPreview({ board, gameData, onChange }: Props) {
   const [editing, setEditing] = useState<{ group: Group; index: number } | null>(null);
   const [adding, setAdding] = useState<Group | null>(null);
@@ -56,9 +73,8 @@ export default function BoardPreview({ board, gameData, onChange }: Props) {
     onChange({ ...board, [group]: list });
   }
 
-  function cycleStar(group: Group, index: number) {
-    const unit = board[group][index];
-    updateUnit(group, index, { ...unit, star: (unit.star % 3) + 1 });
+  function setStar(group: Group, index: number, star: number) {
+    updateUnit(group, index, { ...board[group][index], star });
   }
 
   function addUnit(group: Group, apiName: string) {
@@ -88,13 +104,7 @@ export default function BoardPreview({ board, gameData, onChange }: Props) {
             {champion?.name ?? unit.apiName}
           </span>
         </button>
-        <button
-          onClick={() => cycleStar(group, index)}
-          className="text-[10px] text-amber-400 hover:text-amber-300"
-          title="Cambiar estrellas"
-        >
-          {"★".repeat(unit.star)}
-        </button>
+        <StarRating star={unit.star} onSet={(star) => setStar(group, index, star)} />
         {unit.items.length > 0 && (
           <div className="flex gap-0.5">
             {unit.items.map((itemId, i) => {
