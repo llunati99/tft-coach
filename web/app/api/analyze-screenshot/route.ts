@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { analyzeScreenshot } from "@/lib/anthropic";
-import { formatGameDataForPrompt, getTftGameData } from "@/lib/staticData";
+import { getTftGameData } from "@/lib/staticData";
 
 const ALLOWED_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
 
@@ -26,7 +26,7 @@ export async function POST(request: Request) {
     const board = await analyzeScreenshot(
       base64,
       file.type as "image/png" | "image/jpeg" | "image/webp",
-      formatGameDataForPrompt(gameData)
+      gameData
     );
     return NextResponse.json({ board, setNumber: gameData.setNumber });
   } catch (error) {

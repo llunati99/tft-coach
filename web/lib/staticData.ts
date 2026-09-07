@@ -9,8 +9,14 @@
  */
 
 const DDRAGON_VERSIONS_URL = "https://ddragon.leagueoflegends.com/api/versions.json";
-const COMMUNITY_DRAGON_TFT_DATA_URL =
-  "https://raw.communitydragon.org/latest/cdragon/tft/en_us.json";
+
+// Champion/trait/item names must match what the player actually sees in
+// their client, not an internal English ID — otherwise recommendations
+// name things the player has never seen. es_ar matches LAS's client
+// translations (verified against a real screenshot: "Bosqueviejo",
+// "Fuegorrápido" — es_es uses different wording, e.g. "Bosque ancestral").
+const TFT_LOCALE = process.env.TFT_LOCALE ?? "es_ar";
+const COMMUNITY_DRAGON_TFT_DATA_URL = `https://raw.communitydragon.org/latest/cdragon/tft/${TFT_LOCALE}.json`;
 
 /** Converts a raw game asset path (as found in champion/trait/item data,
  * e.g. "ASSETS/Characters/.../Foo.tft_set18.tex") into a real, fetchable
@@ -119,9 +125,18 @@ export async function getTftGameData(): Promise<TftGameData> {
     ? allItems.filter((item) => currentItemNames.has(item.apiName))
     : allItems;
 
+  // Community Dragon's champion list also includes non-playable entries —
+  // PvE jungle creatures (Golem, Murkwolf, Crab...) and carousel pickup
+  // icons (component/item anvils, trait tome...) — which real champions
+  // never have: every real playable champion has at least one trait, these
+  // all have none. Excluding them stops the vision model from ever
+  // confusing a small/distant player champion for one of these (seen live:
+  // a real Veigar misread as the "Murkwolf" jungle creature).
+  const playableChampions = setData.champions.filter((champ) => champ.traits.length > 0);
+
   const data: TftGameData = {
     setNumber,
-    champions: setData.champions.map((champ) => ({
+    champions: playableChampions.map((champ) => ({
       apiName: champ.apiName,
       name: champ.name,
       traits: champ.traits,

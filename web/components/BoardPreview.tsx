@@ -9,6 +9,29 @@ interface Props {
   gameData: TftGameData;
 }
 
+function ChampionIcon({
+  apiName,
+  championByApiName,
+}: {
+  apiName: string;
+  championByApiName: Map<string, TftGameData["champions"][number]>;
+}) {
+  const champion = championByApiName.get(apiName);
+  return (
+    <div className="flex flex-col items-center gap-1 rounded-lg bg-slate-800 p-2 w-16">
+      {champion?.iconUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={champion.iconUrl} alt={champion.name} className="h-10 w-10 rounded-md object-cover" />
+      ) : (
+        <div className="h-10 w-10 rounded-md bg-slate-700" />
+      )}
+      <span className="text-[10px] text-slate-200 text-center leading-tight">
+        {champion?.name ?? apiName}
+      </span>
+    </div>
+  );
+}
+
 function UnitChip({
   unit,
   championByApiName,
@@ -65,6 +88,17 @@ export default function BoardPreview({ board, gameData }: Props) {
           <span>Aumentos: <strong className="text-white">{board.augments.join(", ")}</strong></span>
         )}
       </div>
+
+      {board.shop.length > 0 && (
+        <>
+          <p className="mb-2 text-xs uppercase tracking-wide text-slate-400">Tienda</p>
+          <div className="mb-4 flex flex-wrap gap-2">
+            {board.shop.map((apiName, i) => (
+              <ChampionIcon key={i} apiName={apiName} championByApiName={championByApiName} />
+            ))}
+          </div>
+        </>
+      )}
 
       <p className="mb-2 text-xs uppercase tracking-wide text-slate-400">Tablero</p>
       <div className="mb-4 flex flex-wrap gap-2">

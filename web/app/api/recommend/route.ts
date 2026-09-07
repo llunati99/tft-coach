@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { BoardReading, getRecommendation, StatsContext } from "@/lib/anthropic";
 import { carryUnit, compSignature } from "@/lib/compSignature";
 import { getCompStats, getItemStats } from "@/lib/db";
-import { computeActiveTraits, formatGameDataForPrompt, getTftGameData } from "@/lib/staticData";
+import { computeActiveTraits, getTftGameData } from "@/lib/staticData";
 
 function describeBoard(board: BoardReading, activeTraits: ReturnType<typeof computeActiveTraits>) {
   const unitLines = board.units
@@ -17,6 +17,8 @@ function describeBoard(board: BoardReading, activeTraits: ReturnType<typeof comp
   return [
     `Nivel ${board.level}, oro ${board.gold}, stage ${board.stage}`,
     board.augments.length ? `Aumentos: ${board.augments.join(", ")}` : "Aumentos: (no visibles)",
+    "Tienda actual:",
+    board.shop.length ? board.shop.join(", ") : "(vacía o no visible)",
     "Unidades en el tablero:",
     unitLines || "(ninguna)",
     "Sinergias activas:",
@@ -75,7 +77,7 @@ export async function POST(request: Request) {
     const recommendation = await getRecommendation(
       describeBoard(board, activeTraits),
       statsContext,
-      formatGameDataForPrompt(gameData)
+      gameData
     );
     return NextResponse.json({ recommendation, compSignature: signature, carryUnit: carry, statsContext });
   } catch (error) {

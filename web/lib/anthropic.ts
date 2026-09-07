@@ -1,4 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
+import type { TftGameData } from "./staticData";
+import { formatGameDataForPrompt } from "./staticData";
 
 const MODEL = "claude-sonnet-5";
 
@@ -26,77 +28,103 @@ export interface BoardUnitReading {
 export interface BoardReading {
   units: BoardUnitReading[];
   bench: BoardUnitReading[];
+  shop: string[];
   gold: number;
   level: number;
   stage: string;
   augments: string[];
 }
 
-const BOARD_TOOL = {
-  name: "report_board",
-  description: "Report the Teamfight Tactics board state read from the screenshot.",
-  input_schema: {
+/**
+ * Champion/item apiNames use inconsistent internal naming across the set
+ * (e.g. "DA_Riftbeast18" vs "DA_18_Elderwood" — no fixed pattern), so a
+ * model asked to freely type one occasionally hallucinates a
+ * plausible-looking but wrong string (seen live: real champion apiNames
+ * came back correct in `shop` but a fabricated one in `units` for the same
+ * champion in the same response). Constraining apiName fields to an enum
+ * of the real current-set names makes the model pick from the real list
+ * instead of inventing one.
+ */
+function buildBoardTool(gameData: TftGameData) {
+  const championApiNames = gameData.champions.map((c) => c.apiName);
+  const itemApiNames = gameData.items.map((i) => i.apiName);
+
+  const unitSchema = {
     type: "object" as const,
     properties: {
-      units: {
+      apiName: { type: "string", enum: championApiNames, description: "Champion apiName." },
+      star: { type: "integer", description: "Star level: 1, 2, or 3." },
+      items: {
         type: "array",
-        description: "Champions currently placed on the board (not the bench).",
-        items: {
-          type: "object",
-          properties: {
-            apiName: { type: "string", description: "Champion apiName from the provided list." },
-            star: { type: "integer", description: "Star level: 1, 2, or 3." },
-            items: {
-              type: "array",
-              items: { type: "string" },
-              description: "Item apiNames equipped, from the provided list. Empty if none.",
-            },
-          },
-          required: ["apiName", "star", "items"],
-        },
-      },
-      bench: {
-        type: "array",
-        description: "Champions on the bench (not placed on board).",
-        items: {
-          type: "object",
-          properties: {
-            apiName: { type: "string" },
-            star: { type: "integer" },
-            items: { type: "array", items: { type: "string" } },
-          },
-          required: ["apiName", "star", "items"],
-        },
-      },
-      gold: { type: "integer", description: "Current gold available." },
-      level: { type: "integer", description: "Current board level." },
-      stage: { type: "string", description: "Current stage-round, e.g. '3-2'." },
-      augments: {
-        type: "array",
-        items: { type: "string" },
-        description: "Augment names visible/known to be active, if any. Empty if not visible.",
+        items: { type: "string", enum: itemApiNames },
+        description: "Item apiNames equipped. Empty if none.",
       },
     },
-    required: ["units", "bench", "gold", "level", "stage", "augments"],
-  },
-};
+    required: ["apiName", "star", "items"],
+  };
+
+  return {
+    name: "report_board",
+    description: "Report the Teamfight Tactics board state read from the screenshot.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        units: { type: "array", description: "Champions currently placed on the board (not the bench).", items: unitSchema },
+        bench: { type: "array", description: "Champions on the bench (not placed on board).", items: unitSchema },
+        shop: {
+          type: "array",
+          items: { type: "string", enum: championApiNames },
+          description:
+            "Champion apiNames currently offered in the shop row at the bottom of the screen, " +
+            "left to right. Omit a slot if it's empty/already bought/not visible.",
+        },
+        gold: { type: "integer", description: "Current gold available." },
+        level: { type: "integer", description: "Current board level." },
+        stage: { type: "string", description: "Current stage-round, e.g. '3-2'." },
+        augments: {
+          type: "array",
+          items: { type: "string" },
+          description: "Augment names visible/known to be active, if any. Empty if not visible.",
+        },
+      },
+      required: ["units", "bench", "shop", "gold", "level", "stage", "augments"],
+    },
+  };
+}
 
 export async function analyzeScreenshot(
   imageBase64: string,
   mediaType: "image/png" | "image/jpeg" | "image/webp",
-  gameDataPrompt: string
+  gameData: TftGameData
 ): Promise<BoardReading> {
+  const boardTool = buildBoardTool(gameData);
+
   const response = await getClient().messages.create({
     model: MODEL,
     max_tokens: 2048,
     system:
       "You read Teamfight Tactics screenshots and report the exact board state using the " +
-      "report_board tool. Only use champion/item apiNames from the reference list provided — " +
-      "never invent names or use ones from other TFT sets. If something isn't visible, use your " +
-      "best reading rather than guessing wildly, but do not fabricate units/items that aren't there.\n\n" +
+      "report_board tool, including the shop row at the bottom (the champions currently offered " +
+      "for purchase) — this is critical, players check this screen mainly to decide what to buy.\n\n" +
+      "MOST screenshots are taken mid-combat, where the player's units and the opponent's are " +
+      "mixed together on the same hex arena. Before listing 'units', go through this checklist for " +
+      "EVERY character model you can see fighting on the arena:\n" +
+      "1. Find its health bar (a thin bar directly above the model).\n" +
+      "2. Green or blue bar → it belongs to the player. Report it.\n" +
+      "3. Red bar → it belongs to the opponent. Do NOT report it, even if it looks like a strong or " +
+      "central unit.\n" +
+      "4. As a secondary check, the player's units are usually the ones closer to the bottom/front " +
+      "of the screen (nearest the camera); the opponent's are usually further back/top. If this " +
+      "conflicts with the health bar color, TRUST THE COLOR.\n" +
+      "Do this per-unit check carefully — do not guess based on which units look more central or " +
+      "important, and do not report a unit you are not reasonably confident is the player's own " +
+      "(green/blue bar). It is better to report fewer units correctly than to guess extra ones.\n\n" +
+      "apiName fields are constrained to the real current-set list — always pick the exact matching " +
+      "entry, never invent or modify one. If something isn't visible, use your best reading rather " +
+      "than guessing wildly, but do not fabricate units/items that aren't there.\n\n" +
       "Reference data for the current set:\n" +
-      gameDataPrompt,
-    tools: [BOARD_TOOL],
+      formatGameDataForPrompt(gameData),
+    tools: [boardTool],
     tool_choice: { type: "tool", name: "report_board" },
     messages: [
       {
@@ -133,57 +161,85 @@ export interface StatsContext {
 }
 
 export interface Recommendation {
+  shortAdvice: string;
+  buyFromShop: string[];
   compDirection: string;
   statsSource: "real" | "estimated";
   sampleSize: number | null;
   priorityChampions: string[];
   itemSuggestions: Array<{ unit: string; item: string; reason: string }>;
-  reasoning: string;
 }
 
-const RECOMMENDATION_TOOL = {
-  name: "report_recommendation",
-  description: "Report a structured TFT recommendation for the current board.",
-  input_schema: {
-    type: "object" as const,
-    properties: {
-      compDirection: { type: "string", description: "The comp direction being recommended, in plain language." },
-      statsSource: {
-        type: "string",
-        enum: ["real", "estimated"],
-        description: "'real' only if real placement/winrate stats were provided in the prompt; otherwise 'estimated'.",
-      },
-      sampleSize: {
-        type: ["integer", "null"],
-        description: "Number of real games backing this, or null if estimated.",
-      },
-      priorityChampions: {
-        type: "array",
-        items: { type: "string" },
-        description: "Champion apiNames worth prioritizing buying/leveling for next.",
-      },
-      itemSuggestions: {
-        type: "array",
-        items: {
-          type: "object",
-          properties: {
-            unit: { type: "string", description: "Champion apiName to receive the item." },
-            item: { type: "string", description: "Item apiName to build." },
-            reason: { type: "string" },
+function buildRecommendationTool(gameData: TftGameData) {
+  const championApiNames = gameData.champions.map((c) => c.apiName);
+  const itemApiNames = gameData.items.map((i) => i.apiName);
+
+  return {
+    name: "report_recommendation",
+    description: "Report a short, direct TFT recommendation for the current board.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        shortAdvice: {
+          type: "string",
+          description:
+            "THE main takeaway, in Spanish, one short sentence (max ~15 words). This is the only " +
+            "free-text field shown prominently — be direct and specific, not a general explanation.",
+        },
+        buyFromShop: {
+          type: "array",
+          items: { type: "string", enum: championApiNames },
+          description: "Champion apiNames from the current shop worth buying right now. Empty if none/save gold.",
+        },
+        compDirection: {
+          type: "string",
+          description: "Very short label for the comp direction, in Spanish, max 6 words (e.g. 'Riftbeast/Blossom flexible').",
+        },
+        statsSource: {
+          type: "string",
+          enum: ["real", "estimated"],
+          description: "'real' only if real placement/winrate stats were provided in the prompt; otherwise 'estimated'.",
+        },
+        sampleSize: {
+          type: ["integer", "null"],
+          description: "Number of real games backing this, or null if estimated.",
+        },
+        priorityChampions: {
+          type: "array",
+          items: { type: "string", enum: championApiNames },
+          description: "Champion apiNames worth prioritizing buying/leveling for next (beyond the current shop). Empty if too early to tell.",
+        },
+        itemSuggestions: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              unit: { type: "string", enum: championApiNames, description: "Champion apiName to receive the item." },
+              item: { type: "string", enum: itemApiNames, description: "Item apiName to build." },
+              reason: { type: "string", description: "Max one short sentence." },
+            },
+            required: ["unit", "item", "reason"],
           },
-          required: ["unit", "item", "reason"],
+          description: "Empty if there are no units with items to build yet (e.g. very early game).",
         },
       },
-      reasoning: { type: "string", description: "Short plain-language explanation, in Spanish." },
+      required: [
+        "shortAdvice",
+        "buyFromShop",
+        "compDirection",
+        "statsSource",
+        "sampleSize",
+        "priorityChampions",
+        "itemSuggestions",
+      ],
     },
-    required: ["compDirection", "statsSource", "sampleSize", "priorityChampions", "itemSuggestions", "reasoning"],
-  },
-};
+  };
+}
 
 export async function getRecommendation(
   boardDescription: string,
   stats: StatsContext,
-  gameDataPrompt: string
+  gameData: TftGameData
 ): Promise<Recommendation> {
   const statsBlock =
     stats.source === "real"
@@ -207,13 +263,14 @@ export async function getRecommendation(
     model: MODEL,
     max_tokens: 2048,
     system:
-      "You are a Teamfight Tactics coach. You MUST report your recommendation using the " +
-      "report_recommendation tool. NEVER present an estimate as if it were real statistics — " +
-      "statsSource must accurately reflect whether real data was given below. Respond in Spanish " +
-      "for all free-text fields.\n\n" +
+      "You are a Teamfight Tactics coach giving advice to a player who is actively mid-game and " +
+      "needs a fast, direct answer — not an essay. You MUST report your recommendation using the " +
+      "report_recommendation tool, keeping shortAdvice to one short, specific sentence. NEVER " +
+      "present an estimate as if it were real statistics — statsSource must accurately reflect " +
+      "whether real data was given below. Respond in Spanish for all free-text fields.\n\n" +
       "Reference data for the current set:\n" +
-      gameDataPrompt,
-    tools: [RECOMMENDATION_TOOL],
+      formatGameDataForPrompt(gameData),
+    tools: [buildRecommendationTool(gameData)],
     tool_choice: { type: "tool", name: "report_recommendation" },
     messages: [
       {
