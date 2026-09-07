@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { TftGameData, TftPickup } from "@/lib/staticData";
 
 interface Props {
@@ -34,6 +34,14 @@ export default function ChampionPicker({ gameData, pickups, onSelect, onClose, m
     return q ? all.filter((o) => o.name.toLowerCase().includes(q)) : all;
   }, [query, gameData.champions, pickups]);
 
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
   function handlePick(apiName: string) {
     if (!multi) {
       onSelect?.(apiName);
@@ -45,14 +53,8 @@ export default function ChampionPicker({ gameData, pickups, onSelect, onClose, m
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 p-4 pt-20"
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-md rounded-xl border border-slate-700 bg-slate-900 p-4"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 p-4 pt-20">
+      <div className="w-full max-w-md rounded-xl border border-slate-700 bg-slate-900 p-4">
         <input
           autoFocus
           type="text"
