@@ -2,8 +2,9 @@
 
 import { useMemo, useState } from "react";
 import type { TftGameData } from "@/lib/staticData";
+import { computeActiveTraits } from "@/lib/staticData";
 import type { BoardReading, BoardUnitReading } from "@/lib/anthropic";
-import ChampionPicker from "./ChampionPicker";
+import EntityPicker, { type PickerOption } from "./EntityPicker";
 
 interface Props {
   board: BoardReading;
@@ -53,9 +54,12 @@ function StarRating({ star, onSet }: { star: number; onSet: (star: number) => vo
   );
 }
 
+type EditTarget = { kind: "unit"; group: Group; index: number } | { kind: "looseItem"; index: number };
+type AddTarget = Group | "looseItems";
+
 export default function BoardPreview({ board, gameData, onChange }: Props) {
-  const [editing, setEditing] = useState<{ group: Group; index: number } | null>(null);
-  const [adding, setAdding] = useState<Group | null>(null);
+  const [editing, setEditing] = useState<EditTarget | null>(null);
+  const [adding, setAdding] = useState<AddTarget | null>(null);
 
   const championByApiName = useMemo(
     () => new Map(gameData.champions.map((c) => [c.apiName, c])),
@@ -64,6 +68,31 @@ export default function BoardPreview({ board, gameData, onChange }: Props) {
   const itemByApiName = useMemo(() => new Map(gameData.items.map((i) => [i.apiName, i])), [gameData]);
   const pickupByApiName = useMemo(() => new Map(gameData.pickups.map((p) => [p.apiName, p])), [gameData]);
   const pickupApiNames = useMemo(() => new Set(gameData.pickups.map((p) => p.apiName)), [gameData]);
+
+  const championOptions: PickerOption[] = useMemo(
+    () =>
+      [...gameData.champions]
+        .sort((a, b) => (a.cost ?? 0) - (b.cost ?? 0))
+        .map((c) => ({ apiName: c.apiName, name: c.name, iconUrl: c.iconUrl })),
+    [gameData]
+  );
+  const pickupOptions: PickerOption[] = useMemo(
+    () => gameData.pickups.map((p) => ({ apiName: p.apiName, name: p.name, iconUrl: p.iconUrl })),
+    [gameData]
+  );
+  const itemOptions: PickerOption[] = useMemo(
+    () =>
+      [...gameData.items]
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map((i) => ({ apiName: i.apiName, name: i.name, iconUrl: i.iconUrl })),
+    [gameData]
+  );
+
+  const activeTraits = useMemo(
+    () => computeActiveTraits(board.units.map((u) => u.apiName), gameData).filter((t) => t.tierCurrent > 0),
+    [board.units, gameData]
+  );
+  const traitByName = useMemo(() => new Map(gameData.traits.map((t) => [t.name, t])), [gameData]);
 
   function updateUnit(group: Group, index: number, updated: BoardUnitReading | null) {
     const list = [...board[group]];
@@ -85,6 +114,21 @@ export default function BoardPreview({ board, gameData, onChange }: Props) {
     setAdding(null);
   }
 
+  function updateLooseItem(index: number, updated: string | null) {
+    const list = [...board.looseItems];
+    if (updated) {
+      list[index] = updated;
+    } else {
+      list.splice(index, 1);
+    }
+    onChange({ ...board, looseItems: list });
+  }
+
+  function addLooseItems(apiNames: string[]) {
+    onChange({ ...board, looseItems: [...board.looseItems, ...apiNames] });
+    setAdding(null);
+  }
+
   function renderUnit(unit: BoardUnitReading, group: Group, index: number) {
     const isPickup = pickupApiNames.has(unit.apiName);
     const entity = isPickup ? pickupByApiName.get(unit.apiName) : championByApiName.get(unit.apiName);
@@ -97,7 +141,10 @@ export default function BoardPreview({ board, gameData, onChange }: Props) {
         >
           ×
         </button>
-        <button onClick={() => setEditing({ group, index })} className="flex flex-col items-center gap-1">
+        <button
+          onClick={() => setEditing({ kind: "unit", group, index })}
+          className="flex flex-col items-center gap-1"
+        >
           {entity?.iconUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={entity.iconUrl} alt={entity.name} className="h-12 w-12 rounded-md object-cover" />
@@ -157,6 +204,28 @@ export default function BoardPreview({ board, gameData, onChange }: Props) {
         </>
       )}
 
+      {activeTraits.length > 0 && (
+        <>
+          <p className="mb-2 text-xs uppercase tracking-wide text-slate-400">Sinergias activas</p>
+          <div className="mb-4 flex flex-wrap gap-2">
+            {activeTraits.map((t) => {
+              const trait = traitByName.get(t.name);
+              return (
+                <div key={t.name} className="flex items-center gap-1.5 rounded-full bg-slate-800 px-2 py-1">
+                  {trait?.iconUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={trait.iconUrl} alt={t.name} className="h-4 w-4" />
+                  ) : null}
+                  <span className="text-xs text-slate-200">
+                    {t.name} ({t.numUnits})
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+
       <p className="mb-2 flex items-center gap-2 text-xs uppercase tracking-wide text-slate-400">
         Tablero
         <button onClick={() => setAdding("units")} className="text-emerald-400 hover:text-emerald-300">
@@ -174,15 +243,50 @@ export default function BoardPreview({ board, gameData, onChange }: Props) {
           + agregar
         </button>
       </p>
-      <div className="flex flex-wrap gap-2">
+      <div className="mb-4 flex flex-wrap gap-2">
         {board.bench.map((unit, i) => renderUnit(unit, "bench", i))}
         {board.bench.length === 0 && <p className="text-sm text-slate-500">(vacía)</p>}
       </div>
 
-      {editing && (
-        <ChampionPicker
-          gameData={gameData}
-          pickups={editing.group === "bench" ? gameData.pickups : undefined}
+      <p className="mb-2 flex items-center gap-2 text-xs uppercase tracking-wide text-slate-400">
+        Items sueltos
+        <button onClick={() => setAdding("looseItems")} className="text-emerald-400 hover:text-emerald-300">
+          + agregar
+        </button>
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {board.looseItems.map((apiName, i) => {
+          const item = itemByApiName.get(apiName);
+          return (
+            <div key={i} className="relative flex flex-col items-center gap-1 rounded-lg bg-slate-800 p-2 w-16">
+              <button
+                onClick={() => updateLooseItem(i, null)}
+                className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-slate-950 text-[10px] text-slate-400 hover:text-red-400"
+                title="Quitar"
+              >
+                ×
+              </button>
+              <button onClick={() => setEditing({ kind: "looseItem", index: i })} className="flex flex-col items-center gap-1">
+                {item?.iconUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={item.iconUrl} alt={item.name} className="h-10 w-10 rounded-md object-cover" />
+                ) : (
+                  <div className="h-10 w-10 rounded-md bg-slate-700" />
+                )}
+                <span className="text-[10px] text-slate-200 text-center leading-tight">
+                  {item?.name ?? apiName}
+                </span>
+              </button>
+            </div>
+          );
+        })}
+        {board.looseItems.length === 0 && <p className="text-sm text-slate-500">(ninguno)</p>}
+      </div>
+
+      {editing?.kind === "unit" && (
+        <EntityPicker
+          options={editing.group === "bench" ? [...pickupOptions, ...championOptions] : championOptions}
+          placeholder="Buscar campeón..."
           onClose={() => setEditing(null)}
           onSelect={(apiName) => {
             const unit = board[editing.group][editing.index];
@@ -192,13 +296,35 @@ export default function BoardPreview({ board, gameData, onChange }: Props) {
         />
       )}
 
-      {adding && (
-        <ChampionPicker
-          gameData={gameData}
-          pickups={adding === "bench" ? gameData.pickups : undefined}
+      {editing?.kind === "looseItem" && (
+        <EntityPicker
+          options={itemOptions}
+          placeholder="Buscar item..."
+          onClose={() => setEditing(null)}
+          onSelect={(apiName) => {
+            updateLooseItem(editing.index, apiName);
+            setEditing(null);
+          }}
+        />
+      )}
+
+      {(adding === "units" || adding === "bench") && (
+        <EntityPicker
+          options={adding === "bench" ? [...pickupOptions, ...championOptions] : championOptions}
+          placeholder="Buscar campeón..."
           onClose={() => setAdding(null)}
           multi
           onConfirm={(apiNames) => addUnits(adding, apiNames)}
+        />
+      )}
+
+      {adding === "looseItems" && (
+        <EntityPicker
+          options={itemOptions}
+          placeholder="Buscar item..."
+          onClose={() => setAdding(null)}
+          multi
+          onConfirm={addLooseItems}
         />
       )}
     </div>

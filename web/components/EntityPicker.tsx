@@ -1,38 +1,33 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { TftGameData, TftPickup } from "@/lib/staticData";
+
+export interface PickerOption {
+  apiName: string;
+  name: string;
+  iconUrl?: string;
+}
 
 interface Props {
-  gameData: TftGameData;
-  pickups?: TftPickup[];
+  options: PickerOption[];
+  placeholder?: string;
   onClose: () => void;
-  /** Single-pick mode (e.g. correcting one existing unit): closes on click. */
+  /** Single-pick mode (e.g. correcting one existing slot): closes on click. */
   onSelect?: (apiName: string) => void;
-  /** Multi-pick mode (e.g. adding several units at once): stays open, lets
-   * the user toggle several, and closes only when they confirm. */
+  /** Multi-pick mode (e.g. adding several at once): stays open, lets the
+   * user toggle several, and closes only when they confirm. */
   multi?: boolean;
   onConfirm?: (apiNames: string[]) => void;
 }
 
-export default function ChampionPicker({ gameData, pickups, onSelect, onClose, multi, onConfirm }: Props) {
+export default function EntityPicker({ options, placeholder, onSelect, onClose, multi, onConfirm }: Props) {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
 
-  const options = useMemo(() => {
-    const champs = [...gameData.champions]
-      .sort((a, b) => (a.cost ?? 0) - (b.cost ?? 0))
-      .map((c) => ({ apiName: c.apiName, name: c.name, iconUrl: c.iconUrl }));
-    const pickupOptions = (pickups ?? []).map((p) => ({
-      apiName: p.apiName,
-      name: p.name,
-      iconUrl: p.iconUrl,
-    }));
-
+  const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const all = [...pickupOptions, ...champs];
-    return q ? all.filter((o) => o.name.toLowerCase().includes(q)) : all;
-  }, [query, gameData.champions, pickups]);
+    return q ? options.filter((o) => o.name.toLowerCase().includes(q)) : options;
+  }, [query, options]);
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -60,11 +55,11 @@ export default function ChampionPicker({ gameData, pickups, onSelect, onClose, m
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Buscar campeón u objeto..."
+          placeholder={placeholder ?? "Buscar..."}
           className="mb-3 w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-white placeholder-slate-500 focus:border-emerald-500 focus:outline-none"
         />
         <div className="grid max-h-96 grid-cols-4 gap-2 overflow-y-auto">
-          {options.map((option) => {
+          {filtered.map((option) => {
             const isSelected = multi && selected.includes(option.apiName);
             return (
               <button
@@ -89,7 +84,7 @@ export default function ChampionPicker({ gameData, pickups, onSelect, onClose, m
               </button>
             );
           })}
-          {options.length === 0 && (
+          {filtered.length === 0 && (
             <p className="col-span-4 py-6 text-center text-sm text-slate-500">Sin resultados</p>
           )}
         </div>

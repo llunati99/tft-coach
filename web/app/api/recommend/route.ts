@@ -29,6 +29,8 @@ function describeBoard(
     board.augments.length ? `Aumentos: ${board.augments.join(", ")}` : "Aumentos: (no visibles)",
     "Tienda actual:",
     board.shop.length ? board.shop.join(", ") : "(vacía o no visible)",
+    "Items sueltos sin equipar (item bag):",
+    board.looseItems.length ? board.looseItems.join(", ") : "(ninguno)",
     "Unidades en el tablero:",
     unitLines || "(ninguna)",
     "Sinergias activas:",

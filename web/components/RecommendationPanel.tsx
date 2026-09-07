@@ -82,7 +82,7 @@ export default function RecommendationPanel({ recommendation, gameData }: Props)
       )}
 
       {recommendation.itemSuggestions.length > 0 && (
-        <div>
+        <div className="mb-3">
           <p className="mb-1 text-xs uppercase tracking-wide text-slate-500">Items</p>
           <div className="flex flex-col gap-1">
             {recommendation.itemSuggestions.map((s, i) => {
@@ -92,6 +92,38 @@ export default function RecommendationPanel({ recommendation, gameData }: Props)
                 <div key={i} className="flex items-center gap-2 text-sm text-slate-300">
                   <span>{champ?.name ?? s.unit} → {item?.name ?? s.item}</span>
                   <span className="text-xs text-slate-500">({s.reason})</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {recommendation.pickupAdvice && (
+        <div className="mb-3 rounded-lg bg-indigo-950/50 p-2 text-sm text-indigo-200">
+          🎁 {recommendation.pickupAdvice}
+        </div>
+      )}
+
+      {recommendation.benchAdvice.length > 0 && (
+        <div>
+          <p className="mb-1 text-xs uppercase tracking-wide text-slate-500">Banca</p>
+          <div className="flex flex-col gap-1">
+            {recommendation.benchAdvice.map((b, i) => {
+              const champ = championByApiName.get(b.unit);
+              const actionStyle =
+                b.action === "vender"
+                  ? "bg-red-900/60 text-red-300"
+                  : b.action === "tablero"
+                  ? "bg-blue-900/60 text-blue-300"
+                  : "bg-slate-700 text-slate-300";
+              return (
+                <div key={i} className="flex items-center gap-2 text-sm text-slate-300">
+                  <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${actionStyle}`}>
+                    {b.action}
+                  </span>
+                  <span>{champ?.name ?? b.unit}</span>
+                  <span className="text-xs text-slate-500">({b.reason})</span>
                 </div>
               );
             })}

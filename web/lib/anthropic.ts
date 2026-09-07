@@ -29,6 +29,7 @@ export interface BoardReading {
   units: BoardUnitReading[];
   bench: BoardUnitReading[];
   shop: string[];
+  looseItems: string[];
   gold: number;
   level: number;
   stage: string;
@@ -79,6 +80,14 @@ function buildBoardTool(gameData: TftGameData) {
             "Champion apiNames currently offered in the shop row at the bottom of the screen, " +
             "left to right. Omit a slot if it's empty/already bought/not visible.",
         },
+        looseItems: {
+          type: "array",
+          items: { type: "string", enum: itemApiNames },
+          description:
+            "Item apiNames sitting unequipped in the player's item bag/tray (a row of item icons " +
+            "usually shown above or near the bench, separate from items already equipped on a " +
+            "unit). Empty if the tray is empty or not visible.",
+        },
         gold: { type: "integer", description: "Current gold available." },
         level: { type: "integer", description: "Current board level." },
         stage: { type: "string", description: "Current stage-round, e.g. '3-2'." },
@@ -95,7 +104,7 @@ function buildBoardTool(gameData: TftGameData) {
             "from certain effects — this is worth flagging to the player. Null if not visible.",
         },
       },
-      required: ["units", "bench", "shop", "gold", "level", "stage", "augments", "rerollCost"],
+      required: ["units", "bench", "shop", "looseItems", "gold", "level", "stage", "augments", "rerollCost"],
     },
   };
 }
@@ -112,9 +121,10 @@ export async function analyzeScreenshot(
     max_tokens: 2048,
     system:
       "You read Teamfight Tactics screenshots and report the exact board state using the " +
-      "report_board tool, including the shop row at the bottom (the champions currently offered " +
-      "for purchase) and the reroll cost next to the coin icon under the reroll button — this is " +
-      "critical, players check this screen mainly to decide what to buy and whether to reroll.\n\n" +
+      "report_board tool, including: the shop row at the bottom (champions currently offered for " +
+      "purchase), the reroll cost next to the coin icon under the reroll button, and any unequipped " +
+      "items sitting in the item bag/tray (separate from items already on a unit) — these are all " +
+      "critical, players check this screen mainly to decide what to buy, reroll, or build.\n\n" +
       "MOST screenshots are taken mid-combat, where the player's units and the opponent's are " +
       "mixed together on the same hex arena. Before listing 'units', go through this checklist for " +
       "EVERY character model you can see fighting on the arena:\n" +
@@ -173,6 +183,7 @@ function normalizeBoardReading(input: Partial<BoardReading>): BoardReading {
     units: (input.units ?? []).map(normalizeUnit),
     bench: (input.bench ?? []).map(normalizeUnit),
     shop: input.shop ?? [],
+    looseItems: input.looseItems ?? [],
     gold: input.gold ?? 0,
     level: input.level ?? 0,
     stage: input.stage ?? "",
@@ -197,6 +208,12 @@ export interface StatsContext {
   }>;
 }
 
+export interface BenchAdvice {
+  unit: string;
+  action: "vender" | "mantener" | "tablero";
+  reason: string;
+}
+
 export interface Recommendation {
   shortAdvice: string;
   buyFromShop: string[];
@@ -205,6 +222,8 @@ export interface Recommendation {
   sampleSize: number | null;
   priorityChampions: string[];
   itemSuggestions: Array<{ unit: string; item: string; reason: string }>;
+  benchAdvice: BenchAdvice[];
+  pickupAdvice: string | null;
 }
 
 function buildRecommendationTool(gameData: TftGameData) {
@@ -259,6 +278,25 @@ function buildRecommendationTool(gameData: TftGameData) {
           },
           description: "Empty if there are no units with items to build yet (e.g. very early game).",
         },
+        benchAdvice: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              unit: { type: "string", enum: championApiNames, description: "Bench champion apiName (real champions only, not pickups)." },
+              action: { type: "string", enum: ["vender", "mantener", "tablero"], description: "vender=sell for gold, mantener=keep on bench for now, tablero=field it now." },
+              reason: { type: "string", description: "Max one short sentence." },
+            },
+            required: ["unit", "action", "reason"],
+          },
+          description: "One entry per REAL champion on the bench (skip pickups like anvils — those go in pickupAdvice). Empty if bench is empty.",
+        },
+        pickupAdvice: {
+          type: ["string", "null"],
+          description:
+            "One short sentence on what to do with any anvil/tome/chest pickup on the bench (e.g. " +
+            "which item/trait to pick, or to save it for later). Null if no pickup is held.",
+        },
       },
       required: [
         "shortAdvice",
@@ -268,6 +306,8 @@ function buildRecommendationTool(gameData: TftGameData) {
         "sampleSize",
         "priorityChampions",
         "itemSuggestions",
+        "benchAdvice",
+        "pickupAdvice",
       ],
     },
   };
@@ -302,9 +342,15 @@ export async function getRecommendation(
     system:
       "You are a Teamfight Tactics coach giving advice to a player who is actively mid-game and " +
       "needs a fast, direct answer — not an essay. You MUST report your recommendation using the " +
-      "report_recommendation tool, keeping shortAdvice to one short, specific sentence. NEVER " +
-      "present an estimate as if it were real statistics — statsSource must accurately reflect " +
-      "whether real data was given below. Respond in Spanish for all free-text fields.\n\n" +
+      "report_recommendation tool, keeping every free-text field to one short, specific sentence " +
+      "each — this is a set of scannable facts, not a paragraph. Always fill benchAdvice for every " +
+      "real champion on the bench, and pickupAdvice whenever a pickup is held — these are easy to " +
+      "forget but the player explicitly wants them covered every time, not just when convenient. " +
+      "NEVER present an estimate as if it were real statistics — statsSource must accurately reflect " +
+      "whether real data was given below. Respond in Spanish for all free-text fields (shortAdvice, " +
+      "compDirection, every 'reason', pickupAdvice) — in those, always refer to champions/items by " +
+      "their real display name (e.g. 'Rakan'), NEVER by their internal apiName (e.g. 'DA_18_Rakan'). " +
+      "apiName is only for the dedicated id fields (buyFromShop, priorityChampions, unit, item).\n\n" +
       "Reference data for the current set:\n" +
       formatGameDataForPrompt(gameData),
     tools: [buildRecommendationTool(gameData)],
@@ -350,5 +396,11 @@ function normalizeRecommendation(input: Partial<Recommendation>): Recommendation
       item: s.item ?? "",
       reason: s.reason ?? "",
     })),
+    benchAdvice: (input.benchAdvice ?? []).map((b) => ({
+      unit: b.unit ?? "",
+      action: b.action ?? "mantener",
+      reason: b.reason ?? "",
+    })),
+    pickupAdvice: input.pickupAdvice ?? null,
   };
 }
