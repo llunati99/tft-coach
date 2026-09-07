@@ -182,7 +182,7 @@ export default function BoardPreview({ board, gameData, onChange }: Props) {
       {editing && (
         <ChampionPicker
           gameData={gameData}
-          pickups={editing.group === "bench" ? gameData.pickups : undefined}
+          pickups={gameData.pickups}
           onClose={() => setEditing(null)}
           onSelect={(apiName) => {
             const unit = board[editing.group][editing.index];
@@ -195,7 +195,7 @@ export default function BoardPreview({ board, gameData, onChange }: Props) {
       {adding && (
         <ChampionPicker
           gameData={gameData}
-          pickups={adding === "bench" ? gameData.pickups : undefined}
+          pickups={gameData.pickups}
           onClose={() => setAdding(null)}
           multi
           onConfirm={(apiNames) => addUnits(adding, apiNames)}
