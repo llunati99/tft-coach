@@ -142,7 +142,7 @@ export default function Home() {
                     onClick={saveSnapshot}
                     className="rounded-lg border border-slate-600 px-4 py-3 font-medium text-slate-200 transition hover:bg-slate-800"
                   >
-                    {justSaved ? "Guardado ✓" : "Guardar captura"}
+                    {justSaved ? "Guardado ✓" : "Guardar fase"}
                   </button>
                 </div>
               </>

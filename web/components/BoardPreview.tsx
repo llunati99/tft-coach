@@ -88,11 +88,24 @@ export default function BoardPreview({ board, gameData, onChange }: Props) {
     [gameData]
   );
 
-  const activeTraits = useMemo(
-    () => computeActiveTraits(board.units.map((u) => u.apiName), gameData).filter((t) => t.tierCurrent > 0),
+  // All traits contributed by units on board — active AND in-progress —
+  // so the player can see what they're building toward, not just what's
+  // already active.
+  const boardTraits = useMemo(
+    () => computeActiveTraits(board.units.map((u) => u.apiName), gameData),
     [board.units, gameData]
   );
   const traitByName = useMemo(() => new Map(gameData.traits.map((t) => [t.name, t])), [gameData]);
+
+  function nextThreshold(traitName: string, numUnits: number): number | null {
+    const trait = traitByName.get(traitName);
+    if (!trait) return null;
+    const upcoming = trait.effects
+      .map((e) => e.minUnits)
+      .filter((min) => min > numUnits)
+      .sort((a, b) => a - b);
+    return upcoming[0] ?? null;
+  }
 
   function updateUnit(group: Group, index: number, updated: BoardUnitReading | null) {
     const list = [...board[group]];
@@ -204,20 +217,31 @@ export default function BoardPreview({ board, gameData, onChange }: Props) {
         </>
       )}
 
-      {activeTraits.length > 0 && (
+      {boardTraits.length > 0 && (
         <>
-          <p className="mb-2 text-xs uppercase tracking-wide text-slate-400">Sinergias activas</p>
+          <p className="mb-2 text-xs uppercase tracking-wide text-slate-400">Sinergias</p>
           <div className="mb-4 flex flex-wrap gap-2">
-            {activeTraits.map((t) => {
+            {boardTraits.map((t) => {
               const trait = traitByName.get(t.name);
+              const isActive = t.tierCurrent > 0;
+              const next = nextThreshold(t.name, t.numUnits);
               return (
-                <div key={t.name} className="flex items-center gap-1.5 rounded-full bg-slate-800 px-2 py-1">
+                <div
+                  key={t.name}
+                  className={`flex items-center gap-1.5 rounded-full px-2 py-1 ${
+                    isActive ? "bg-emerald-900/60" : "bg-slate-800"
+                  }`}
+                >
                   {trait?.iconUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={trait.iconUrl} alt={t.name} className="h-4 w-4" />
+                    <img
+                      src={trait.iconUrl}
+                      alt={t.name}
+                      className={`h-4 w-4 ${isActive ? "" : "opacity-40 grayscale"}`}
+                    />
                   ) : null}
-                  <span className="text-xs text-slate-200">
-                    {t.name} ({t.numUnits})
+                  <span className={`text-xs ${isActive ? "text-emerald-300" : "text-slate-400"}`}>
+                    {t.name} ({t.numUnits}{next != null ? `/${next}` : ""})
                   </span>
                 </div>
               );
