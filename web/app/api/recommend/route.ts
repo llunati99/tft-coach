@@ -16,6 +16,9 @@ function describeBoard(board: BoardReading, activeTraits: ReturnType<typeof comp
 
   return [
     `Nivel ${board.level}, oro ${board.gold}, stage ${board.stage}`,
+    board.rerollCost === 0
+      ? "¡El próximo rerroll es GRATIS (cuesta 0 de oro)! — mencionalo si conviene aprovecharlo."
+      : `Costo del próximo rerroll: ${board.rerollCost ?? "no visible"}`,
     board.augments.length ? `Aumentos: ${board.augments.join(", ")}` : "Aumentos: (no visibles)",
     "Tienda actual:",
     board.shop.length ? board.shop.join(", ") : "(vacía o no visible)",

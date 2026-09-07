@@ -128,6 +128,11 @@ export default function BoardPreview({ board, gameData, onChange }: Props) {
         <span>Nivel <strong className="text-white">{board.level}</strong></span>
         <span>Oro <strong className="text-white">{board.gold}</strong></span>
         <span>Stage <strong className="text-white">{board.stage}</strong></span>
+        {board.rerollCost === 0 && (
+          <span className="rounded-full bg-emerald-900/60 px-2 py-0.5 text-xs font-medium text-emerald-300">
+            Rerroll gratis
+          </span>
+        )}
         {board.augments.length > 0 && (
           <span>Aumentos: <strong className="text-white">{board.augments.join(", ")}</strong></span>
         )}

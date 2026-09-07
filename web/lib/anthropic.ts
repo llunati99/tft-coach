@@ -33,6 +33,7 @@ export interface BoardReading {
   level: number;
   stage: string;
   augments: string[];
+  rerollCost: number | null;
 }
 
 /**
@@ -86,8 +87,15 @@ function buildBoardTool(gameData: TftGameData) {
           items: { type: "string" },
           description: "Augment names visible/known to be active, if any. Empty if not visible.",
         },
+        rerollCost: {
+          type: ["integer", "null"],
+          description:
+            "The gold cost of the next shop reroll, shown next to the coin icon under the " +
+            "'Rerrolear'/reroll button at the bottom-left. Normally 2, but can be 0 (free reroll) " +
+            "from certain effects — this is worth flagging to the player. Null if not visible.",
+        },
       },
-      required: ["units", "bench", "shop", "gold", "level", "stage", "augments"],
+      required: ["units", "bench", "shop", "gold", "level", "stage", "augments", "rerollCost"],
     },
   };
 }
@@ -105,7 +113,8 @@ export async function analyzeScreenshot(
     system:
       "You read Teamfight Tactics screenshots and report the exact board state using the " +
       "report_board tool, including the shop row at the bottom (the champions currently offered " +
-      "for purchase) — this is critical, players check this screen mainly to decide what to buy.\n\n" +
+      "for purchase) and the reroll cost next to the coin icon under the reroll button — this is " +
+      "critical, players check this screen mainly to decide what to buy and whether to reroll.\n\n" +
       "MOST screenshots are taken mid-combat, where the player's units and the opponent's are " +
       "mixed together on the same hex arena. Before listing 'units', go through this checklist for " +
       "EVERY character model you can see fighting on the arena:\n" +
