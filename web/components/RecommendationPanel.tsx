@@ -58,10 +58,13 @@ export default function RecommendationPanel({ recommendation, gameData }: Props)
       <p className="mb-2 text-xl font-semibold leading-snug text-white">{recommendation.shortAdvice}</p>
 
       {recommendation.buyFromShop.length > 0 && (
-        <div className="mb-3 flex flex-wrap gap-2">
-          {recommendation.buyFromShop.map((apiName, i) => (
-            <ChampionIcon key={`${apiName}-${i}`} apiName={apiName} championByApiName={championByApiName} />
-          ))}
+        <div className="mb-3">
+          <p className="mb-1 text-xs uppercase tracking-wide text-emerald-500">Comprar de la tienda ahora</p>
+          <div className="flex flex-wrap gap-2">
+            {recommendation.buyFromShop.map((apiName, i) => (
+              <ChampionIcon key={`${apiName}-${i}`} apiName={apiName} championByApiName={championByApiName} />
+            ))}
+          </div>
         </div>
       )}
 

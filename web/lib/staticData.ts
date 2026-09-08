@@ -216,12 +216,32 @@ export async function getTftGameData(): Promise<TftGameData> {
   // Compare case-insensitively so both collapse into one; keep the first
   // apiName seen per name.
   const seenNames = new Set<string>();
-  const scopedItems = namedItems.filter((item) => {
+  const dedupedByName = namedItems.filter((item) => {
     const key = item.name.toLowerCase();
     if (seenNames.has(key)) return false;
     seenNames.add(key);
     return true;
   });
+
+  // The generic/reskin pair doesn't always share a name (verified live:
+  // "Limpiador Magnético" / TFT_Consumable_ItemRemover and "Limpiador de
+  // Objetos" / DA_Consumable_ItemRemover are the exact same item — a
+  // basic item remover — under two different Spanish names, so the
+  // name-based dedup above didn't catch it). Strip the generic/DA_ prefix
+  // to get the underlying item's real identity and dedupe on that too,
+  // preferring the DA_ (this set's own) entry when both exist.
+  const CORE_IDENTITY_PATTERN = /^(TFT\d*_Item_|TFT\d*_Consumable_|DA_Consumable_|DA_Item_|DA_)(.+)$/;
+  const coreIdentity = (apiName: string) => apiName.match(CORE_IDENTITY_PATTERN)?.[2] ?? apiName;
+
+  const byCoreIdentity = new Map<string, (typeof dedupedByName)[number]>();
+  for (const item of dedupedByName) {
+    const key = coreIdentity(item.apiName);
+    const existing = byCoreIdentity.get(key);
+    if (!existing || (!existing.apiName.startsWith("DA_") && item.apiName.startsWith("DA_"))) {
+      byCoreIdentity.set(key, item);
+    }
+  }
+  const scopedItems = Array.from(byCoreIdentity.values());
 
   // Community Dragon's champion list also includes non-playable entries —
   // PvE jungle creatures (Golem, Murkwolf, Crab...) and carousel pickup

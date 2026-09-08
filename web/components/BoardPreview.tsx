@@ -208,11 +208,17 @@ export default function BoardPreview({ board, gameData, onChange }: Props) {
         <span>Nivel <strong className="text-white">{board.level}</strong></span>
         <span>Oro <strong className="text-white">{board.gold}</strong></span>
         <span>Stage <strong className="text-white">{board.stage}</strong></span>
-        {board.rerollCost === 0 && (
-          <span className="rounded-full bg-emerald-900/60 px-2 py-0.5 text-xs font-medium text-emerald-300">
-            Rerroll gratis
-          </span>
-        )}
+        <button
+          onClick={() => onChange({ ...board, rerollCost: board.rerollCost === 0 ? null : 0 })}
+          className={
+            board.rerollCost === 0
+              ? "rounded-full bg-emerald-900/60 px-2 py-0.5 text-xs font-medium text-emerald-300 hover:bg-emerald-900"
+              : "rounded-full border border-slate-700 px-2 py-0.5 text-xs font-medium text-slate-500 hover:border-slate-500 hover:text-slate-300"
+          }
+          title="La lectura automática del reroll a veces falla — tocá para corregir a mano"
+        >
+          {board.rerollCost === 0 ? "Rerroll gratis ✕" : "¿Reroll gratis?"}
+        </button>
         {board.augments.length > 0 && (
           <span>Aumentos: <strong className="text-white">{board.augments.join(", ")}</strong></span>
         )}
