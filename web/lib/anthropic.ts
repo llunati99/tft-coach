@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { TftGameData } from "./staticData";
-import { formatGameDataForPrompt } from "./staticData";
+import { formatChampionsForPrompt, formatGameDataForPrompt } from "./staticData";
 
 const MODEL = "claude-sonnet-5";
 
@@ -38,41 +38,26 @@ export interface BoardReading {
 }
 
 /**
- * Champion/item apiNames use inconsistent internal naming across the set
- * (e.g. "DA_Riftbeast18" vs "DA_18_Elderwood" — no fixed pattern), so a
- * model asked to freely type one occasionally hallucinates a
- * plausible-looking but wrong string (seen live: real champion apiNames
- * came back correct in `shop` but a fabricated one in `units` for the same
- * champion in the same response). Constraining apiName fields to an enum
- * of the real current-set names makes the model pick from the real list
- * instead of inventing one.
+ * The vision model only reads fields verified live to be reliable: the
+ * shop row and simple HUD numbers (gold/level/stage/reroll cost) — plain
+ * text reads that came back correct in every test. Identifying WHICH
+ * champion/item a small on-board or bench icon is did not: the same tiny
+ * sprite was misread as three different champions across repeated
+ * attempts, and enum-constraining the apiName field only stopped it from
+ * inventing a fake one — it didn't make the identification itself
+ * accurate. Units, bench, and loose items are entered manually instead
+ * (see BoardPreview's EntityPicker) — deliberately not asked for here, so
+ * the model can't guess at them at all.
  */
 function buildBoardTool(gameData: TftGameData) {
   const championApiNames = gameData.champions.map((c) => c.apiName);
-  const itemApiNames = gameData.items.map((i) => i.apiName);
-
-  const unitSchema = {
-    type: "object" as const,
-    properties: {
-      apiName: { type: "string", enum: championApiNames, description: "Champion apiName." },
-      star: { type: "integer", description: "Star level: 1, 2, or 3." },
-      items: {
-        type: "array",
-        items: { type: "string", enum: itemApiNames },
-        description: "Item apiNames equipped. Empty if none.",
-      },
-    },
-    required: ["apiName", "star", "items"],
-  };
 
   return {
     name: "report_board",
-    description: "Report the Teamfight Tactics board state read from the screenshot.",
+    description: "Report the Teamfight Tactics shop and HUD state read from the screenshot.",
     input_schema: {
       type: "object" as const,
       properties: {
-        units: { type: "array", description: "Champions currently placed on the board (not the bench).", items: unitSchema },
-        bench: { type: "array", description: "Champions on the bench (not placed on board).", items: unitSchema },
         shop: {
           type: "array",
           items: { type: "string", enum: championApiNames },
@@ -80,22 +65,9 @@ function buildBoardTool(gameData: TftGameData) {
             "Champion apiNames currently offered in the shop row at the bottom of the screen, " +
             "left to right. Omit a slot if it's empty/already bought/not visible.",
         },
-        looseItems: {
-          type: "array",
-          items: { type: "string", enum: itemApiNames },
-          description:
-            "Item apiNames sitting unequipped in the player's item bag/tray (a row of item icons " +
-            "usually shown above or near the bench, separate from items already equipped on a " +
-            "unit). Empty if the tray is empty or not visible.",
-        },
         gold: { type: "integer", description: "Current gold available." },
         level: { type: "integer", description: "Current board level." },
         stage: { type: "string", description: "Current stage-round, e.g. '3-2'." },
-        augments: {
-          type: "array",
-          items: { type: "string" },
-          description: "Augment names visible/known to be active, if any. Empty if not visible.",
-        },
         rerollCost: {
           type: ["integer", "null"],
           description:
@@ -104,7 +76,7 @@ function buildBoardTool(gameData: TftGameData) {
             "from certain effects — this is worth flagging to the player. Null if not visible.",
         },
       },
-      required: ["units", "bench", "shop", "looseItems", "gold", "level", "stage", "augments", "rerollCost"],
+      required: ["shop", "gold", "level", "stage", "rerollCost"],
     },
   };
 }
@@ -120,29 +92,16 @@ export async function analyzeScreenshot(
     model: MODEL,
     max_tokens: 2048,
     system:
-      "You read Teamfight Tactics screenshots and report the exact board state using the " +
-      "report_board tool, including: the shop row at the bottom (champions currently offered for " +
-      "purchase), the reroll cost next to the coin icon under the reroll button, and any unequipped " +
-      "items sitting in the item bag/tray (separate from items already on a unit) — these are all " +
-      "critical, players check this screen mainly to decide what to buy, reroll, or build.\n\n" +
-      "MOST screenshots are taken mid-combat, where the player's units and the opponent's are " +
-      "mixed together on the same hex arena. Before listing 'units', go through this checklist for " +
-      "EVERY character model you can see fighting on the arena:\n" +
-      "1. Find its health bar (a thin bar directly above the model).\n" +
-      "2. Green or blue bar → it belongs to the player. Report it.\n" +
-      "3. Red bar → it belongs to the opponent. Do NOT report it, even if it looks like a strong or " +
-      "central unit.\n" +
-      "4. As a secondary check, the player's units are usually the ones closer to the bottom/front " +
-      "of the screen (nearest the camera); the opponent's are usually further back/top. If this " +
-      "conflicts with the health bar color, TRUST THE COLOR.\n" +
-      "Do this per-unit check carefully — do not guess based on which units look more central or " +
-      "important, and do not report a unit you are not reasonably confident is the player's own " +
-      "(green/blue bar). It is better to report fewer units correctly than to guess extra ones.\n\n" +
-      "apiName fields are constrained to the real current-set list — always pick the exact matching " +
-      "entry, never invent or modify one. If something isn't visible, use your best reading rather " +
-      "than guessing wildly, but do not fabricate units/items that aren't there.\n\n" +
-      "Reference data for the current set:\n" +
-      formatGameDataForPrompt(gameData),
+      "You read the shop and HUD numbers from a Teamfight Tactics screenshot and report them with " +
+      "the report_board tool: the shop row at the bottom (champions currently offered for " +
+      "purchase), gold, level, stage, and the reroll cost next to the coin icon under the reroll " +
+      "button. Do not attempt to identify units on the board or bench — that isn't asked for here.\n\n" +
+      "shop apiNames are constrained to the real current-set list — always pick the exact matching " +
+      "entry, never invent or modify one. Omit a shop slot rather than guess if it's unclear " +
+      "which champion it is. gold/level/stage/rerollCost are plain numbers/text — read them exactly " +
+      "as shown; use null for rerollCost only if the reroll button truly isn't visible.\n\n" +
+      "Champions for the current set:\n" +
+      formatChampionsForPrompt(gameData),
     tools: [boardTool],
     tool_choice: { type: "tool", name: "report_board" },
     messages: [

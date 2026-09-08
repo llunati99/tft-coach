@@ -219,7 +219,9 @@ export default function BoardPreview({ board, gameData, onChange }: Props) {
       </div>
 
       <p className="mb-3 text-xs text-slate-500">
-        Tocá un campeón para corregirlo, la ✕ para quitarlo, o las estrellas para cambiarlas.
+        Tienda, oro, nivel, stage y reroll se leen solos de la captura. Tablero, banca e items se
+        cargan a mano con &quot;+ agregar&quot; — tocá una unidad para corregirla, la ✕ para
+        quitarla, o las estrellas para cambiarlas.
       </p>
 
       {board.shop.length > 0 && (
@@ -274,7 +276,7 @@ export default function BoardPreview({ board, gameData, onChange }: Props) {
       </p>
       <div className="mb-4 flex flex-wrap gap-2">
         {board.units.map((unit, i) => renderUnit(unit, "units", i))}
-        {board.units.length === 0 && <p className="text-sm text-slate-500">(sin unidades detectadas)</p>}
+        {board.units.length === 0 && <p className="text-sm text-slate-500">(agregá tus unidades)</p>}
       </div>
 
       <p className="mb-2 flex items-center gap-2 text-xs uppercase tracking-wide text-slate-400">

@@ -271,6 +271,16 @@ export async function getTftGameData(): Promise<TftGameData> {
   return data;
 }
 
+/** Just the champion list — for the screenshot-reading call, which only
+ * ever needs to name shop champions now (see buildBoardTool). Cheaper
+ * than the full reference block since it skips ~770 items it never uses. */
+export function formatChampionsForPrompt(data: TftGameData): string {
+  const champLines = data.champions
+    .map((c) => `${c.name} (${c.apiName}) [${c.traits.join(", ")}]`)
+    .join("\n");
+  return ["CHAMPIONS:", champLines].join("\n");
+}
+
 /** Compact text block listing current champions/traits/items by name, for
  * grounding the vision model's prompt so it maps icons to real current-set
  * names instead of guessing from potentially stale training data. */
