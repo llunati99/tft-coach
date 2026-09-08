@@ -196,7 +196,16 @@ export async function getTftGameData(): Promise<TftGameData> {
     // reward bundles that get auto-granted and consumed — never something
     // the player picks up and holds — so they don't belong in a "loose
     // items in your bag" picker at all.
-    .filter((item) => !item.apiName.includes("_Assist_"));
+    .filter((item) => !item.apiName.includes("_Assist_"))
+    // Limited-use consumables (e.g. Limpiador Magnético) have one entry
+    // PER remaining-charge count, with the count baked into the name as
+    // literal markup — verified live, "lim" surfaced 10 near-identical
+    // "Limpiador Magnético <rules>(¡N usos restantes!)</rules>" options
+    // alongside the one real entry, "Limpiador Magnético". The player
+    // only ever needs to add the fresh/full-charge item, so drop every
+    // variant carrying this markup rather than try to keep "the right"
+    // charge count.
+    .filter((item) => !/<[a-z]+>/i.test(item.name));
 
   // Many of these share a display name with another apiName: most often a
   // generic cross-set item vs this set's identically-named reskin (e.g.

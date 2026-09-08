@@ -224,7 +224,7 @@ export default function BoardPreview({ board, gameData, onChange }: Props) {
         quitarla, o las estrellas para cambiarlas.
       </p>
 
-      {board.shop.length > 0 && (
+      {(board.shop.length > 0 || board.specialOffer) && (
         <>
           <p className="mb-2 text-xs uppercase tracking-wide text-slate-400">Tienda</p>
           <div className="mb-4 flex flex-wrap gap-2">
@@ -232,6 +232,11 @@ export default function BoardPreview({ board, gameData, onChange }: Props) {
               <ChampionIcon key={i} apiName={apiName} championByApiName={championByApiName} />
             ))}
           </div>
+          {board.specialOffer && (
+            <div className="mb-4 rounded-lg bg-indigo-950/50 p-2 text-sm text-indigo-200">
+              🎁 Oferta especial: {board.specialOffer}
+            </div>
+          )}
         </>
       )}
 

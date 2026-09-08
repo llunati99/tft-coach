@@ -30,6 +30,9 @@ function describeBoardFull(board: BoardReading, gameData: TftGameData, label: st
     board.augments.length ? `Aumentos: ${board.augments.join(", ")}` : "Aumentos: (no visibles)",
     "Tienda actual:",
     board.shop.length ? board.shop.join(", ") : "(vacía o no visible)",
+    board.specialOffer
+      ? `Oferta especial en la tienda (no es un campeón): ${board.specialOffer} — decile al jugador si conviene comprarla.`
+      : "",
     "Items sueltos sin equipar (item bag):",
     board.looseItems.length ? board.looseItems.join(", ") : "(ninguno)",
     "Unidades en el tablero:",

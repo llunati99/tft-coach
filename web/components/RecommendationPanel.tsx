@@ -105,6 +105,12 @@ export default function RecommendationPanel({ recommendation, gameData }: Props)
         </div>
       )}
 
+      {recommendation.specialOfferAdvice && (
+        <div className="mb-3 rounded-lg bg-indigo-950/50 p-2 text-sm text-indigo-200">
+          🎁 {recommendation.specialOfferAdvice}
+        </div>
+      )}
+
       {recommendation.benchAdvice.length > 0 && (
         <div>
           <p className="mb-1 text-xs uppercase tracking-wide text-slate-500">Banca</p>

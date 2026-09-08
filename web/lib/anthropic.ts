@@ -29,6 +29,7 @@ export interface BoardReading {
   units: BoardUnitReading[];
   bench: BoardUnitReading[];
   shop: string[];
+  specialOffer: string | null;
   looseItems: string[];
   gold: number;
   level: number;
@@ -65,6 +66,15 @@ function buildBoardTool(gameData: TftGameData) {
             "Champion apiNames currently offered in the shop row at the bottom of the screen, " +
             "left to right. Omit a slot if it's empty/already bought/not visible.",
         },
+        specialOffer: {
+          type: ["string", "null"],
+          description:
+            "If one of the shop slots holds a non-champion special offer card (e.g. a purchasable " +
+            "consumable, component, or event reward — text like 'Obtienes 1 consumible que otorga " +
+            "armadura...' instead of a champion portrait), transcribe its text/description here " +
+            "verbatim (in Spanish, as shown) along with its gold cost if visible. Null if every " +
+            "shop slot is a normal champion or the slot is empty.",
+        },
         gold: { type: "integer", description: "Current gold available." },
         level: { type: "integer", description: "Current board level." },
         stage: { type: "string", description: "Current stage-round, e.g. '3-2'." },
@@ -76,7 +86,7 @@ function buildBoardTool(gameData: TftGameData) {
             "from certain effects — this is worth flagging to the player. Null if not visible.",
         },
       },
-      required: ["shop", "gold", "level", "stage", "rerollCost"],
+      required: ["shop", "specialOffer", "gold", "level", "stage", "rerollCost"],
     },
   };
 }
@@ -94,12 +104,15 @@ export async function analyzeScreenshot(
     system:
       "You read the shop and HUD numbers from a Teamfight Tactics screenshot and report them with " +
       "the report_board tool: the shop row at the bottom (champions currently offered for " +
-      "purchase), gold, level, stage, and the reroll cost next to the coin icon under the reroll " +
-      "button. Do not attempt to identify units on the board or bench — that isn't asked for here.\n\n" +
+      "purchase, or occasionally a non-champion special offer card in one slot — see " +
+      "specialOffer), gold, level, stage, and the reroll cost next to the coin icon under the " +
+      "reroll button. Do not attempt to identify units on the board or bench — that isn't asked " +
+      "for here.\n\n" +
       "shop apiNames are constrained to the real current-set list — always pick the exact matching " +
       "entry, never invent or modify one. Omit a shop slot rather than guess if it's unclear " +
-      "which champion it is. gold/level/stage/rerollCost are plain numbers/text — read them exactly " +
-      "as shown; use null for rerollCost only if the reroll button truly isn't visible.\n\n" +
+      "which champion it is. gold/level/stage/rerollCost/specialOffer are plain numbers/text — read " +
+      "them exactly as shown; use null for rerollCost only if the reroll button truly isn't " +
+      "visible.\n\n" +
       "Champions for the current set:\n" +
       formatChampionsForPrompt(gameData),
     tools: [boardTool],
@@ -142,6 +155,7 @@ function normalizeBoardReading(input: Partial<BoardReading>): BoardReading {
     units: (input.units ?? []).map(normalizeUnit),
     bench: (input.bench ?? []).map(normalizeUnit),
     shop: input.shop ?? [],
+    specialOffer: input.specialOffer ?? null,
     looseItems: input.looseItems ?? [],
     gold: input.gold ?? 0,
     level: input.level ?? 0,
@@ -183,6 +197,7 @@ export interface Recommendation {
   itemSuggestions: Array<{ unit: string; item: string; reason: string }>;
   benchAdvice: BenchAdvice[];
   pickupAdvice: string | null;
+  specialOfferAdvice: string | null;
 }
 
 function buildRecommendationTool(gameData: TftGameData) {
@@ -208,7 +223,7 @@ function buildRecommendationTool(gameData: TftGameData) {
         },
         compDirection: {
           type: "string",
-          description: "Very short label for the comp direction, in Spanish, max 6 words (e.g. 'Riftbeast/Blossom flexible').",
+          description: "Very short label for the comp direction, in Spanish, max 6 words (e.g. 'Riftbeast con Blossom de apoyo').",
         },
         statsSource: {
           type: "string",
@@ -256,6 +271,12 @@ function buildRecommendationTool(gameData: TftGameData) {
             "One short sentence on what to do with any anvil/tome/chest pickup on the bench (e.g. " +
             "which item/trait to pick, or to save it for later). Null if no pickup is held.",
         },
+        specialOfferAdvice: {
+          type: ["string", "null"],
+          description:
+            "One short sentence on whether to buy the non-champion special offer in the shop, if " +
+            "the board description mentions one. Null if no special offer is present.",
+        },
       },
       required: [
         "shortAdvice",
@@ -267,6 +288,7 @@ function buildRecommendationTool(gameData: TftGameData) {
         "itemSuggestions",
         "benchAdvice",
         "pickupAdvice",
+        "specialOfferAdvice",
       ],
     },
   };
@@ -304,13 +326,18 @@ export async function getRecommendation(
       "needs a fast, direct answer — not an essay. You MUST report your recommendation using the " +
       "report_recommendation tool, keeping every free-text field to one short, specific sentence " +
       "each — this is a set of scannable facts, not a paragraph. Always fill benchAdvice for every " +
-      "real champion on the bench, and pickupAdvice whenever a pickup is held — these are easy to " +
+      "real champion on the bench, pickupAdvice whenever a pickup is held, and specialOfferAdvice " +
+      "whenever the board description mentions a non-champion shop offer — these are easy to " +
       "forget but the player explicitly wants them covered every time, not just when convenient. " +
       "NEVER present an estimate as if it were real statistics — statsSource must accurately reflect " +
       "whether real data was given below. Respond in Spanish for all free-text fields (shortAdvice, " +
       "compDirection, every 'reason', pickupAdvice) — in those, always refer to champions/items by " +
       "their real display name (e.g. 'Rakan'), NEVER by their internal apiName (e.g. 'DA_18_Rakan'). " +
-      "apiName is only for the dedicated id fields (buyFromShop, priorityChampions, unit, item).\n\n" +
+      "apiName is only for the dedicated id fields (buyFromShop, priorityChampions, unit, item). " +
+      "The player doesn't know competitive TFT jargon — avoid terms like 'flex/flexible', 'econ', " +
+      "'slam', 'roll down', 'greed' etc. unless you briefly say what they mean in the same breath; " +
+      "prefer just saying the concrete action in plain words (e.g. instead of 'seguí flexible' say " +
+      "'no te cierres a una sola comp todavía, comprá lo que te salga bueno').\n\n" +
       (hasHistory
         ? "The board description below includes earlier saved snapshots from THIS SAME match, in " +
           "chronological order, before the current state. Use them to understand how the comp/" +
@@ -369,5 +396,6 @@ function normalizeRecommendation(input: Partial<Recommendation>): Recommendation
       reason: b.reason ?? "",
     })),
     pickupAdvice: input.pickupAdvice ?? null,
+    specialOfferAdvice: input.specialOfferAdvice ?? null,
   };
 }
