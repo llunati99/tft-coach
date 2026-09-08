@@ -187,14 +187,24 @@ export interface BenchAdvice {
   reason: string;
 }
 
+export interface UnitAdvice {
+  unit: string;
+  action: "vender" | "mantener" | "banca";
+  reason: string;
+}
+
 export interface Recommendation {
   shortAdvice: string;
   buyFromShop: string[];
+  shopAdvice: string;
+  rerollAdvice: string;
   compDirection: string;
   statsSource: "real" | "estimated";
   sampleSize: number | null;
   priorityChampions: string[];
   itemSuggestions: Array<{ unit: string; item: string; reason: string }>;
+  itemAdvice: string;
+  unitAdvice: UnitAdvice[];
   benchAdvice: BenchAdvice[];
   pickupAdvice: string | null;
   specialOfferAdvice: string | null;
@@ -221,6 +231,20 @@ function buildRecommendationTool(gameData: TftGameData) {
           items: { type: "string", enum: championApiNames },
           description: "Champion apiNames from the current shop worth buying right now. Empty if none/save gold.",
         },
+        shopAdvice: {
+          type: "string",
+          description:
+            "ALWAYS answer directly: should the player buy anything from the current shop right " +
+            "now, and why (or why not)? One short sentence. If buyFromShop is empty, this must say " +
+            "why — e.g. 'nada vale la pena todavía, guardá el oro'.",
+        },
+        rerollAdvice: {
+          type: "string",
+          description:
+            "ALWAYS answer directly: should the player reroll the shop now (and for what — a " +
+            "specific champion or trait, if there's a clear one), or save gold and not reroll? One " +
+            "short sentence, every time, regardless of stage.",
+        },
         compDirection: {
           type: "string",
           description: "Very short label for the comp direction, in Spanish, max 6 words (e.g. 'Riftbeast con Blossom de apoyo').",
@@ -245,12 +269,42 @@ function buildRecommendationTool(gameData: TftGameData) {
             type: "object",
             properties: {
               unit: { type: "string", enum: championApiNames, description: "Champion apiName to receive the item." },
-              item: { type: "string", enum: itemApiNames, description: "Item apiName to build." },
+              item: {
+                type: "string",
+                enum: itemApiNames,
+                description:
+                  "Item apiName to EQUIP on the unit. Must be an actual equippable stat item " +
+                  "(weapon/armor/completed item/component) — NEVER a consumable or utility item " +
+                  "(item removers, duplicators, reforgers, emblems, anvils, etc.) — those aren't " +
+                  "equippable, they're used from the item bag itself, not assigned to a unit here.",
+              },
               reason: { type: "string", description: "Max one short sentence." },
             },
             required: ["unit", "item", "reason"],
           },
           description: "Empty if there are no units with items to build yet (e.g. very early game).",
+        },
+        itemAdvice: {
+          type: "string",
+          description:
+            "ALWAYS answer directly: is there any loose item worth equipping on a unit right now, " +
+            "or not? One short sentence, every time. If the player's loose items are only " +
+            "consumables/utility items (removers, duplicators, etc. — not equippable), say so " +
+            "plainly (e.g. 'no tenés items para equipar todavía, esos son consumibles') instead of " +
+            "silently leaving itemSuggestions empty with no explanation.",
+        },
+        unitAdvice: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              unit: { type: "string", enum: championApiNames, description: "Champion apiName currently on the BOARD (not bench)." },
+              action: { type: "string", enum: ["vender", "mantener", "banca"], description: "vender=sell for gold, mantener=keep fielded, banca=bench it (make room for something better)." },
+              reason: { type: "string", description: "Max one short sentence." },
+            },
+            required: ["unit", "action", "reason"],
+          },
+          description: "One entry per champion currently on the board. Empty if the board is empty.",
         },
         benchAdvice: {
           type: "array",
@@ -281,11 +335,15 @@ function buildRecommendationTool(gameData: TftGameData) {
       required: [
         "shortAdvice",
         "buyFromShop",
+        "shopAdvice",
+        "rerollAdvice",
         "compDirection",
         "statsSource",
         "sampleSize",
         "priorityChampions",
         "itemSuggestions",
+        "itemAdvice",
+        "unitAdvice",
         "benchAdvice",
         "pickupAdvice",
         "specialOfferAdvice",
@@ -325,10 +383,14 @@ export async function getRecommendation(
       "You are a Teamfight Tactics coach giving advice to a player who is actively mid-game and " +
       "needs a fast, direct answer — not an essay. You MUST report your recommendation using the " +
       "report_recommendation tool, keeping every free-text field to one short, specific sentence " +
-      "each — this is a set of scannable facts, not a paragraph. Always fill benchAdvice for every " +
-      "real champion on the bench, pickupAdvice whenever a pickup is held, and specialOfferAdvice " +
-      "whenever the board description mentions a non-champion shop offer — these are easy to " +
-      "forget but the player explicitly wants them covered every time, not just when convenient. " +
+      "each — this is a set of scannable facts, not a paragraph. The player explicitly wants these " +
+      "four questions answered directly EVERY time, in shopAdvice/rerollAdvice/itemAdvice/" +
+      "unitAdvice+benchAdvice respectively — never skip one or leave it implicit, even in the " +
+      "earliest stages: (1) should I buy something from the shop right now? (2) should I reroll, " +
+      "and for what? (3) should I equip any held item on a unit? (4) should I sell/bench any unit " +
+      "I currently have? A clear 'no, because X' is a complete answer — an empty array with no " +
+      "explanation is not. Also always fill pickupAdvice whenever a pickup is held, and " +
+      "specialOfferAdvice whenever the board description mentions a non-champion shop offer.\n\n" +
       "NEVER present an estimate as if it were real statistics — statsSource must accurately reflect " +
       "whether real data was given below. Respond in Spanish for all free-text fields (shortAdvice, " +
       "compDirection, every 'reason', pickupAdvice) — in those, always refer to champions/items by " +
@@ -381,6 +443,8 @@ function normalizeRecommendation(input: Partial<Recommendation>): Recommendation
   return {
     shortAdvice: input.shortAdvice ?? "",
     buyFromShop: input.buyFromShop ?? [],
+    shopAdvice: input.shopAdvice ?? "",
+    rerollAdvice: input.rerollAdvice ?? "",
     compDirection: input.compDirection ?? "",
     statsSource: input.statsSource ?? "estimated",
     sampleSize: input.sampleSize ?? null,
@@ -389,6 +453,12 @@ function normalizeRecommendation(input: Partial<Recommendation>): Recommendation
       unit: s.unit ?? "",
       item: s.item ?? "",
       reason: s.reason ?? "",
+    })),
+    itemAdvice: input.itemAdvice ?? "",
+    unitAdvice: (input.unitAdvice ?? []).map((u) => ({
+      unit: u.unit ?? "",
+      action: u.action ?? "mantener",
+      reason: u.reason ?? "",
     })),
     benchAdvice: (input.benchAdvice ?? []).map((b) => ({
       unit: b.unit ?? "",
